@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pixel Foundry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <header id="topbar">
+    <div class="logo">PIXEL<span>FOUNDRY</span></div>
+    <div class="cash"><div id="money">$0</div><div id="income">+$0/s</div></div>
+    <div class="spacer"></div>
+    <button id="btn-help" title="Help">?</button>
+    <button id="btn-save" title="Save">Save</button>
+    <button id="btn-reset" title="Reset" class="danger">Reset</button>
+  </header>
+
+  <aside id="panel">
+    <button id="panel-toggle" title="Toggle panel">≡</button>
+    <div class="tabs">
+      <button data-tab="upgrades" class="on">Upgrades</button>
+      <button data-tab="research">Research</button>
+      <button data-tab="stats">Stats</button>
+    </div>
+    <div class="body"></div>
+  </aside>
+
+  <div id="inspector" class="hidden"></div>
+  <div id="status"></div>
+  <nav id="toolbar"></nav>
+  <div id="tooltip" class="hidden"></div>
+  <div id="toasts"></div>
+  <div id="modal" class="hidden"><div class="mbox"></div></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

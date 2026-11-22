@@ -1,0 +1,69 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script src="../js/data.js"></script><script src="../js/game.js"></script>
+<script>
+// Headless simulation test: builds small factories and checks money flows.
+const log = [];
+const check = (name, cond, extra='') => log.push((cond ? 'PASS ' : 'FAIL ') + name + ' ' + extra);
+try {
+  const g = new Game(12345);
+  const c = g.center();
+  g.money = 1e6;
+  // miner -> 3 belts -> market, all heading east into market at (c.x, c.y)
+  const y = c.y;
+  g.ore[y * g.w + c.x - 5] = 'iron_ore';
+  g.place('miner', c.x - 5, y, 0);
+  for (let x = c.x - 4; x < c.x; x++) g.place('belt', x, y, 0);
+  const m0 = g.money;
+  for (let i = 0; i < 20 * 30; i++) g.update(TICK);
+  const earned = g.money - m0;
+  check('raw ore line earns', earned > 10, 'earned=' + earned.toFixed(1) + ' sold=' + JSON.stringify(g.stats.sold));
+
+  // insert smelter
+  g.remove(c.x - 2, y);
+  g.place('smelter', c.x - 2, y, 0);
+  g.stats.sold = {};
+  for (let i = 0; i < 20 * 30; i++) g.update(TICK);
+  check('smelter line sells plates', (g.stats.sold.iron_plate || 0) > 5, JSON.stringify(g.stats.sold));
+
+  // throughput: 6 miners feeding one long belt
+  const g2 = new Game(7); g2.money = 1e9;
+  const c2 = g2.center();
+  for (let x = c2.x - 20; x < c2.x; x++) g2.place('belt', x, c2.y, 0);
+  for (let x = c2.x - 20; x < c2.x - 14; x++) { g2.ore[(c2.y-1)*g2.w+x]='iron_ore'; g2.place('miner', x, c2.y - 1, 1); }
+  for (let i = 0; i < 20 * 60; i++) g2.update(TICK);
+  const rate = g2.stats.sold.iron_ore / 60;
+  check('belt throughput reasonable', rate > 1.2, 'items/s=' + rate.toFixed(2) + ' beltSpeed=' + g2.beltSpeed());
+
+  // assembler gear chain
+  const g3 = new Game(9); g3.money = 1e9; g3.research.assembly = true;
+  const c3 = g3.center();
+  for (let x = c3.x - 6; x < c3.x - 4; x++) { g3.ore[(c3.y)*g3.w+x]='iron_ore'; }
+  g3.place('miner', c3.x - 6, c3.y, 0);
+  g3.place('miner', c3.x - 5, c3.y, 0); // miner pushing into miner - should block
+  g3.place('belt', c3.x - 4, c3.y, 0);
+  g3.place('smelter', c3.x - 3, c3.y, 0);
+  g3.place('belt', c3.x - 2, c3.y, 0);
+  g3.place('assembler', c3.x - 1, c3.y, 0);
+  for (let i = 0; i < 20 * 60; i++) g3.update(TICK);
+  check('assembler makes gears', (g3.stats.sold.gear || 0) > 3, JSON.stringify(g3.stats.sold));
+
+  // splitter
+  const g4 = new Game(3); g4.money = 1e9; g4.research.splitter = true;
+  const c4 = g4.center();
+  g4.ore[c4.y*g4.w + c4.x-3] = 'iron_ore';
+  g4.place('miner', c4.x - 3, c4.y - 1 + 1, 0);
+  g4.place('splitter', c4.x - 2, c4.y, 0);
+  g4.place('belt', c4.x - 2, c4.y - 1, 3); g4.place('belt', c4.x - 2, c4.y - 2, 0); g4.place('belt', c4.x - 1, c4.y - 2, 0);
+  g4.place('seller', c4.x, c4.y - 2, 0);
+  g4.place('belt', c4.x - 1, c4.y, 0);
+  for (let i = 0; i < 20 * 30; i++) g4.update(TICK);
+  check('splitter distributes', g4.stats.sold.iron_ore > 10, JSON.stringify(g4.stats.sold));
+
+  // save/load roundtrip
+  const s = g3.serialize();
+  const g5 = Game.deserialize(JSON.parse(JSON.stringify(s)));
+  check('save roundtrip', g5.buildings.length === g3.buildings.length && g5.money === g3.money, g5.buildings.length + ' vs ' + g3.buildings.length);
+  check('income rate computed', g3.incomeRate > 0, 'rate=' + g3.incomeRate.toFixed(2));
+} catch (e) { log.push('ERROR ' + e.stack); }
+document.getElementById('out').textContent = log.join('\n');
+</script></body></html>
