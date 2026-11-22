@@ -305,6 +305,53 @@ class Game {
     }
     // keep the spawn area clear
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) this.ore[(c.y + dy) * this.w + c.x + dx] = null;
+    this.generateDecor();
+  }
+
+  // Forests, bushes, rocks and ponds. Uses its own RNG stream so ore layouts
+  // (and therefore old saves) are unaffected. Trees/bushes/rocks are cleared
+  // automatically when you build on them; water can't be built on.
+  generateDecor() {
+    const rng = mulberry32(this.seed ^ 0x9e3779b9);
+    const W = this.w, H = this.h, c = this.center();
+    const noise = (cell) => {
+      const gw = Math.ceil(W / cell) + 2, gh = Math.ceil(H / cell) + 2;
+      const grid = Array.from({ length: gw * gh }, () => rng());
+      const sm = (t) => t * t * (3 - 2 * t);
+      return (x, y) => {
+        const fx = x / cell, fy = y / cell, ix = Math.floor(fx), iy = Math.floor(fy);
+        const tx = sm(fx - ix), ty = sm(fy - iy);
+        const v = (i, j) => grid[(iy + j) * gw + ix + i];
+        return (v(0, 0) * (1 - tx) + v(1, 0) * tx) * (1 - ty) + (v(0, 1) * (1 - tx) + v(1, 1) * tx) * ty;
+      };
+    };
+    const forest = noise(9), forest2 = noise(4), pond = noise(7);
+    this.decor = new Uint8Array(W * H);
+    this.water = new Uint8Array(W * H);
+    this.cleared = new Set();
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (this.ore[i]) continue;
+        const d = Math.hypot(x - c.x, y - c.y);
+        if (d > 10 && pond(x, y) > 0.74) { this.water[i] = 1; continue; }
+        if (d < 4.5) continue;
+        const f = forest(x, y) * 0.75 + forest2(x, y) * 0.25;
+        const r = rng();
+        if (f > 0.6 && r < 0.6) this.decor[i] = rng() < 0.35 ? 2 : 1; // pine / round tree
+        else if (r < 0.03) this.decor[i] = 3; // bush
+        else if (r < 0.045) this.decor[i] = 4; // rock
+      }
+    }
+    // keep shores from touching ore so deposits stay reachable
+    for (let i = 0; i < W * H; i++) if (this.water[i] && this.ore[i]) this.water[i] = 0;
+  }
+
+  isWater(x, y) { return this.inBounds(x, y) && this.water[y * this.w + x] === 1; }
+  decorAt(x, y) {
+    if (!this.inBounds(x, y)) return 0;
+    const i = y * this.w + x;
+    return this.cleared.has(i) ? 0 : this.decor[i];
   }
 
   inBounds(x, y) { return x >= 0 && y >= 0 && x < this.w && y < this.h; }
@@ -441,6 +488,7 @@ class Game {
     if (!this.inBounds(x, y)) return 'Out of bounds';
     if (!this.inLand(x, y)) return 'Land not owned — buy more in Upgrades';
     if (this.at(x, y)) return 'Tile occupied';
+    if (this.isWater(x, y)) return "Can't build on water";
     if (!this.buildingUnlocked(type)) return 'Not researched';
     if (type === 'miner' && !this.oreAt(x, y)) return 'Miners need ore';
     if (this.money < this.cost(type)) return 'Not enough money';
@@ -453,6 +501,7 @@ class Game {
     const price = free ? 0 : this.cost(type);
     this.money -= price;
     const b = { type, x, y, dir: BUILDINGS[type].dir ? dir & 3 : 0, paid: price };
+    if (this.decor[y * this.w + x]) this.cleared.add(y * this.w + x); // chop the tree / clear the rock
     if (type === 'tunnel') b.mode = this.autoTunnelMode(x, y, b.dir);
     LOGIC[type].init(b);
     this.buildings.push(b);
@@ -703,6 +752,7 @@ class Game {
       runLaunches: this.runLaunches,
       incomeRate: this.incomeRate,
       earnBuckets: this.earnBuckets,
+      cleared: [...this.cleared],
       buildings: this.buildings.map((b) => {
         const o = {};
         for (const k in b) if (!TRANSIENT[k]) o[k] = b[k];
@@ -745,6 +795,8 @@ class Game {
       this.buildings.push(b);
       this.grid[b.y * this.w + b.x] = b;
     }
+    this.cleared = new Set(data.cleared || []);
+    for (const b of this.buildings) if (this.decor[b.y * this.w + b.x]) this.cleared.add(b.y * this.w + b.x);
     this.dirty = true;
     this.orderDirty = true;
   }

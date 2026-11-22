@@ -31,12 +31,14 @@ class UI {
       selected: null, // {x, y}
       deleting: false,
       showGrid: settings.grid !== false,
+      dayNight: settings.dayNight !== false,
     };
     this.tab = 'upgrades';
     this.keys = new Set();
     this.lastSlow = 0;
     this.lastMini = 0;
     this.lastSellCount = 0;
+    $('#coin-ico').src = iconURL('coin');
     this.buildToolbar();
     this.bindPanel();
     this.bindMouse();
@@ -478,7 +480,7 @@ class UI {
   deleteAt(t) {
     if (!this.game.at(t.x, t.y)) return;
     if (this.input.selected && this.input.selected.x === t.x && this.input.selected.y === t.y) this.select(null);
-    if (this.act({ type: 'remove', x: t.x, y: t.y }).ok) Sound.play('remove');
+    if (this.act({ type: 'remove', x: t.x, y: t.y }).ok) { Sound.play('remove'); this.r.dust(t.x, t.y); }
   }
 
   ping(t) {
@@ -681,9 +683,9 @@ class UI {
     if (this.miniSeed !== g.seed) {
       this.miniSeed = g.seed;
       const img = ctx.createImageData(g.w, g.h);
-      const col = { iron_ore: [154, 163, 178], copper_ore: [217, 120, 63], stone: [158, 147, 131], coal: [40, 40, 48], gold_ore: [232, 184, 48] };
+      const col = { iron_ore: [148, 176, 194], copper_ore: [239, 125, 87], stone: [179, 165, 141], coal: [38, 43, 68], gold_ore: [255, 205, 117] };
       for (let i = 0; i < g.w * g.h; i++) {
-        const c = col[g.ore[i]] || [40, 52, 38];
+        const c = col[g.ore[i]] || (g.water[i] ? [59, 93, 201] : g.decor[i] === 1 || g.decor[i] === 2 ? [34, 85, 58] : [76, 154, 75]);
         img.data.set([c[0], c[1], c[2], 255], i * 4);
       }
       this.miniBase = img;
@@ -724,6 +726,8 @@ class UI {
         ${hasSave ? `<div class="muted">Saved factory · $${fmt(g.money)} · ${fmtTime(g.meta.life.playTime)} played${g.meta.prestiges ? ` · ✦${fmt(g.meta.patentsTotal)}` : ''}</div>` : ''}
         <div class="muted small">Sound and music are synthesized live — press M to mute.</div>
       </div>`);
+    this.titleOpen = true;
+    $('#modal').classList.add('title-mode');
     const start = () => Sound.unlock();
     $('#t-play').onclick = () => {
       start();
@@ -760,6 +764,7 @@ class UI {
       <label class="field">Music <input id="s-music" type="range" min="0" max="1" step="0.05" value="${S.music}"></label>
       <label class="check"><input id="s-mute" type="checkbox" ${S.muted ? 'checked' : ''}> Mute everything (M)</label>
       <label class="check"><input id="s-grid" type="checkbox" ${this.input.showGrid ? 'checked' : ''}> Show grid</label>
+      <label class="check"><input id="s-day" type="checkbox" ${this.input.dayNight ? 'checked' : ''}> Day / night cycle</label>
       <h4>Save data</h4>
       <div class="mbtns left"><button id="s-save">Save now</button><button id="s-export">Export</button><button id="s-import">Import</button><button id="s-reset" class="danger">Wipe everything</button></div>
       <textarea id="s-text" class="hidden" rows="4" placeholder="Paste a save here, then press Import again"></textarea>
@@ -768,10 +773,11 @@ class UI {
       S.sfx = +$('#s-sfx').value; S.music = +$('#s-music').value; S.muted = $('#s-mute').checked;
       Sound.applyVolumes();
       this.input.showGrid = $('#s-grid').checked;
+      this.input.dayNight = $('#s-day').checked;
       Net.myName = ($('#s-name').value.trim() || 'Player').slice(0, 16);
-      saveSettings({ sound: S, grid: this.input.showGrid, name: Net.myName });
+      saveSettings({ sound: S, grid: this.input.showGrid, dayNight: this.input.dayNight, name: Net.myName });
     };
-    ['#s-sfx', '#s-music', '#s-mute', '#s-grid', '#s-name'].forEach((id) => $(id).addEventListener('input', upd));
+    ['#s-sfx', '#s-music', '#s-mute', '#s-grid', '#s-day', '#s-name'].forEach((id) => $(id).addEventListener('input', upd));
     $('#s-sfx').addEventListener('change', () => Sound.play('buy'));
     $('#s-save').onclick = () => { if (this.game.save()) this.toast('Game saved'); else this.toast('Guests can’t save — the host keeps the world', true); };
     $('#s-export').onclick = () => {
@@ -810,10 +816,12 @@ class UI {
     const m = $('#modal');
     m.querySelector('.mbox').innerHTML = html;
     m.classList.remove('hidden');
+    m.classList.remove('title-mode');
+    this.titleOpen = false;
     this.modalClosable = closable;
     this.hideTip();
   }
-  closeModal() { $('#modal').classList.add('hidden'); }
+  closeModal() { $('#modal').classList.add('hidden'); this.titleOpen = false; }
 
   toast(msg, bad) {
     if (bad) Sound.play('error');
@@ -901,7 +909,7 @@ class UI {
       this.lastSellCount = g.sellCount;
     }
 
-    $('#money').textContent = '$' + fmt(g.money);
+    $('#money-val').textContent = '$' + fmt(g.money);
     $('#income').textContent = '+$' + fmt(g.incomeRate) + '/s';
     if (g.dirty) {
       g.dirty = false;
@@ -921,6 +929,11 @@ class UI {
       const claim = g.claimablePatents();
       $('#patents').innerHTML = `✦ ${fmt(g.meta.patents)}${claim ? ` <span class="good">(+${fmt(claim)})</span>` : ''}`;
       if (claim > 0) $('#patents').classList.remove('hidden');
+      const ds = dayState();
+      const hour = Math.floor(((ds.ph + 0.25) % 1) * 24);
+      $('#clock').innerHTML = this.input.dayNight
+        ? `<span class="${ds.night > 0.5 ? 'moon' : 'sun'}">${ds.night > 0.5 ? '☾' : '☀'}</span> ${String(hour).padStart(2, '0')}:00`
+        : '';
       if (this.tab === 'stats' || this.tab === 'patents') {
         if (!document.querySelector('#panel .body:hover')) this.renderPanel();
       }

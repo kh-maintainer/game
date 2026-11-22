@@ -100,6 +100,7 @@ const app = {
       this.acc -= TICK;
     }
     if (steps >= 10) this.acc = 0;
+    if (this.ui.titleOpen) { this.renderer.cam.x += dt * 0.9; this.renderer.cam.y += dt * 0.25; this.renderer.clampCamera(); }
     this.renderer.update(dt);
     Net.update(dt, this.ui.input);
     const partner = Net.partner && Net.connected() ? { cursor: Net.partner.cursor, name: Net.partner.name, color: Net.partnerColor() } : null;

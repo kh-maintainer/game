@@ -1,9 +1,23 @@
 'use strict';
 // ---------------------------------------------------------------------------
-// Procedural pixel-art sprites. Everything is drawn at native resolution
-// (16x16 buildings, 8x8 items) and scaled up with nearest-neighbour filtering.
-// Directional sprites are drawn facing EAST and rotated at draw time.
+// Procedural pixel art. Everything is built from one cohesive palette
+// (based on Sweetie 16) at native resolution — 16x16 buildings, 8x8 items —
+// and scaled up with nearest-neighbour filtering. Directional sprites face
+// EAST and are rotated at draw time.
 // ---------------------------------------------------------------------------
+
+const PAL = {
+  ink: '#1a1c2c', plum: '#5d275d', red: '#b13e53', orange: '#ef7d57', gold: '#ffcd75',
+  lime: '#a7f070', green: '#38b764', teal: '#257179', navy: '#29366f', blue: '#3b5dc9',
+  sky: '#41a6f6', cyan: '#73eff7', white: '#f4f4f4', mist: '#94b0c2', steel: '#566c86', slate: '#333c57',
+  // extended ramps
+  deep: '#11121d', slate2: '#3e4a6b', groove: '#262b44',
+  wood: '#8f563b', woodL: '#c28569', woodD: '#663931', woodDD: '#3f2832',
+  leafO: '#173828', leafD: '#22553a', leafM: '#2f7a42', leafL: '#4fa34a', leafH: '#8fd16a',
+  grassD: '#3f8a45', grass: '#4c9a4b', grassL: '#5aa852', grassH: '#7cc35f', grassDD: '#33733d',
+  dirt: '#7a5236', dirtD: '#5a3a28', dirtL: '#9a6a44',
+  waterD: '#29366f', water: '#3b5dc9', waterL: '#41a6f6',
+};
 
 function mkCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -18,6 +32,16 @@ function sprite(w, h, fn) {
   const P = (x, y, pw, ph, col) => { g.fillStyle = col; g.fillRect(x, y, pw, ph); };
   fn(P, g);
   return c;
+}
+
+// filled pixel circle (centre may be fractional)
+function disc(P, cx, cy, r, col) {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      if (dx * dx + dy * dy <= r * r) P(x, y, 1, 1, col);
+    }
+  }
 }
 
 function fromStrings(rows, pal) {
@@ -145,316 +169,430 @@ const SHAPES = {
     '..d..d..',
     '..d..d..',
   ],
+  coin: [
+    '..dddd..',
+    '.daaaad.',
+    'dabbbbcd',
+    'dabddbcd',
+    'dabddbcd',
+    'dabbbbcd',
+    '.dcccdd.',
+    '..dddd..',
+  ],
 };
 
+const K = PAL.ink;
 const ITEM_ART = {
-  iron_ore:     ['ore',     { a: '#d7dde6', b: '#9aa3b2', c: '#6b7280', d: '#22262e' }],
-  copper_ore:   ['ore',     { a: '#ffc08a', b: '#d9783f', c: '#9c4a22', d: '#331a0e' }],
-  stone:        ['ore',     { a: '#d6cdbd', b: '#a3988a', c: '#72695d', d: '#2a2622' }],
-  coal:         ['ore',     { a: '#74748a', b: '#3e3e4a', c: '#26262e', d: '#0b0b0f' }],
-  iron_plate:   ['plate',   { a: '#f4f7fb', b: '#b8c0cc', c: '#7c8594', d: '#22262e' }],
-  copper_plate: ['plate',   { a: '#ffd8b0', b: '#e08a4e', c: '#a8552a', d: '#331a0e' }],
-  brick:        ['brick',   { a: '#f0a080', b: '#c0573a', c: '#8a3522', d: '#3a1610' }],
-  gear:         ['gear',    { a: '#eef1f5', b: '#a9b1bd', c: '#6d7684', d: '#22262e' }],
-  wire:         ['wire',    { a: '#ffb070', b: '#c8642c', d: '#6a4e36' }],
-  circuit:      ['circuit', { a: '#1e1e24', e: '#3a3a44', b: '#2f9e4f', d: '#145a2a', c: '#f2c94c' }],
-  steel:        ['steel',   { a: '#e6edf4', b: '#9fb0c0', c: '#6a7b8c', d: '#1b232d' }],
-  motor:        ['motor',   { a: '#c7d3de', b: '#7d8ea0', c: '#4f5d6b', d: '#1b2129', e: '#d9783f', f: '#ffb070' }],
-  gold_ore:     ['ore',     { a: '#fff0a0', b: '#e8b830', c: '#a87810', d: '#3a2a08' }],
-  gold_bar:     ['ingot',   { a: '#fff3b0', b: '#f2c94c', c: '#b08a20', d: '#3a2a08' }],
-  processor:    ['processor', { a: '#2a2a33', c: '#f2c94c', d: '#101014', e: '#3f6f8f', f: '#7fe0ff' }],
-  robot:        ['robot',   { a: '#d0d8e0', b: '#8a96a3', c: '#ff5a4a', d: '#1b2129', f: '#7fe0ff' }],
+  iron_ore:     ['ore',     { a: PAL.white, b: PAL.mist, c: PAL.steel, d: K }],
+  copper_ore:   ['ore',     { a: '#ffc59a', b: PAL.orange, c: '#a5482f', d: K }],
+  stone:        ['ore',     { a: '#e2d6c2', b: '#b3a58d', c: '#7d705e', d: K }],
+  coal:         ['ore',     { a: PAL.steel, b: PAL.slate, c: PAL.groove, d: '#07070c' }],
+  gold_ore:     ['ore',     { a: '#fff6c8', b: PAL.gold, c: '#c98f3a', d: K }],
+  iron_plate:   ['plate',   { a: PAL.white, b: PAL.mist, c: PAL.steel, d: K }],
+  copper_plate: ['plate',   { a: '#ffd9b5', b: PAL.orange, c: '#a5482f', d: K }],
+  brick:        ['brick',   { a: '#f59a7a', b: PAL.red, c: '#7a2a3a', d: K }],
+  gold_bar:     ['ingot',   { a: '#fff6c8', b: PAL.gold, c: '#c98f3a', d: K }],
+  gear:         ['gear',    { a: PAL.white, b: PAL.mist, c: PAL.steel, d: K }],
+  wire:         ['wire',    { a: '#ffb88a', b: PAL.orange, d: PAL.woodD }],
+  circuit:      ['circuit', { a: PAL.ink, e: PAL.slate, b: PAL.green, d: PAL.teal, c: PAL.gold }],
+  steel:        ['steel',   { a: PAL.white, b: PAL.mist, c: PAL.steel, d: K }],
+  motor:        ['motor',   { a: PAL.mist, b: PAL.steel, c: PAL.slate, d: K, e: PAL.orange, f: '#ffb88a' }],
+  processor:    ['processor', { a: PAL.slate, c: PAL.gold, d: K, e: PAL.blue, f: PAL.cyan }],
+  robot:        ['robot',   { a: PAL.white, b: PAL.mist, c: PAL.red, d: K, f: PAL.cyan }],
 };
 
 // ------------------------------- buildings ---------------------------------
-function frameBox(P, body, light, shade, outline) {
-  P(1, 1, 14, 14, outline);
-  P(2, 2, 12, 12, body);
-  P(2, 2, 12, 1, light);
-  P(2, 2, 1, 12, light);
-  P(2, 13, 12, 1, shade);
-  P(13, 2, 1, 12, shade);
+// Bevelled box: outline, body, light top/left edge, dark bottom/right edge.
+function box(P, x, y, w, h, body, light, shade, out = K) {
+  P(x, y, w, h, out);
+  P(x + 1, y + 1, w - 2, h - 2, body);
+  P(x + 1, y + 1, w - 2, 1, light);
+  P(x + 1, y + 1, 1, h - 2, light);
+  P(x + 1, y + h - 2, w - 2, 1, shade);
+  P(x + w - 2, y + 1, 1, h - 2, shade);
 }
 
-// output chute on the east edge with a small arrow
-function chute(P, outline) {
-  P(13, 5, 3, 6, outline);
-  P(14, 6, 2, 4, '#4a4f58');
-  P(14, 7, 1, 2, '#f2c94c');
+// output port on the east edge
+function port(P, lit) {
+  P(13, 5, 3, 6, K);
+  P(14, 6, 2, 4, PAL.slate);
+  P(14, 6, 2, 1, PAL.steel);
+  P(15, 7, 1, 2, lit ? PAL.gold : PAL.orange);
+}
+
+function beltBase(P) {
+  P(0, 0, 16, 16, K);
+  P(0, 3, 16, 10, PAL.slate);
+  // side rails
+  P(0, 1, 16, 1, PAL.mist);
+  P(0, 2, 16, 1, PAL.steel);
+  P(0, 13, 16, 1, PAL.steel);
+  P(0, 14, 16, 1, PAL.slate2);
+}
+
+function chevrons(P, f, xmin = 0, xmax = 16) {
+  for (let k = 0; k < 2; k++) {
+    const cx = k * 8 + f;
+    for (let i = 0; i < 3; i++) {
+      for (const t of [0, 1]) {
+        const x = (cx + i + t) % 16;
+        if (x < xmin || x >= xmax) continue;
+        P(x, 5 + i, 1, 1, PAL.slate2);
+        P(x, 10 - i, 1, 1, PAL.slate2);
+      }
+    }
+    const tip = (cx + 3) % 16;
+    if (tip >= xmin && tip < xmax) { P(tip, 7, 1, 2, PAL.steel); }
+  }
 }
 
 function beltFrame(f) {
   return sprite(16, 16, (P) => {
-    P(0, 0, 16, 16, '#24242b');
-    P(0, 2, 16, 12, '#2d2d35');
-    // chevrons scroll eastward
-    for (let k = 0; k < 2; k++) {
-      const cx = k * 8 + f;
-      for (let i = 0; i < 4; i++) {
-        for (const t of [0, 1]) {
-          const x = (cx + i + t) % 16;
-          P(x, 4 + i, 1, 1, '#45454f');
-          P(x, 11 - i, 1, 1, '#45454f');
-        }
-      }
-    }
-    // rails
-    P(0, 0, 16, 2, '#5f5f6c');
-    P(0, 1, 16, 1, '#474752');
-    P(0, 14, 16, 2, '#5f5f6c');
-    P(0, 15, 16, 1, '#3a3a44');
-    for (const bx of [3, 11]) {
-      P(bx, 0, 1, 1, '#8a8a98');
-      P(bx, 14, 1, 1, '#8a8a98');
-    }
-  });
-}
-
-function minerFrame(f) {
-  return sprite(16, 16, (P) => {
-    const out = '#241d10';
-    frameBox(P, '#c9a227', '#ecd06a', '#8a6d12', out);
-    // hazard stripes
-    for (let x = 3; x < 13; x++) P(x, 3, 1, 1, ((x >> 1) & 1) ? '#241d10' : '#f2c94c');
-    // drill housing
-    P(4, 6, 7, 7, out);
-    P(3, 7, 9, 5, out);
-    P(5, 7, 5, 5, '#8d939c');
-    P(4, 8, 7, 3, '#8d939c');
-    P(5, 7, 5, 1, '#b8bec7');
-    // spinning bit
-    if (f === 0) {
-      P(7, 7, 1, 5, '#3a3f48');
-      P(5, 9, 5, 1, '#3a3f48');
-    } else {
-      P(5, 8, 1, 1, '#3a3f48'); P(6, 9, 1, 1, '#3a3f48'); P(8, 9, 1, 1, '#3a3f48'); P(9, 8, 1, 1, '#3a3f48');
-      P(5, 10, 1, 1, '#3a3f48'); P(9, 10, 1, 1, '#3a3f48'); P(7, 9, 1, 1, '#3a3f48');
-    }
-    P(7, 9, 1, 1, '#1a1d22');
-    chute(P, out);
-  });
-}
-
-function smelterFrame(f) {
-  return sprite(16, 16, (P) => {
-    const out = '#221c18';
-    frameBox(P, '#847a70', '#a89e92', '#5a524a', out);
-    // brick courses
-    for (const y of [5, 9]) P(2, y, 11, 1, '#635a52');
-    for (const [x, y] of [[5, 2], [10, 2], [4, 6], [9, 6], [6, 10], [11, 10]]) P(x, y, 1, 3, '#635a52');
-    // mouth
-    P(4, 7, 7, 6, out);
-    P(5, 8, 5, 5, '#140c0a');
-    if (f > 0) {
-      const hot = f === 1;
-      P(5, 10, 5, 3, hot ? '#ff8a2a' : '#e0661c');
-      P(6, 9, 3, 2, hot ? '#ffd36b' : '#ffae3a');
-      P(7, 8, 1, 1, hot ? '#fff1b8' : '#ffd36b');
-    } else {
-      P(5, 12, 5, 1, '#4a1c10');
-    }
-    // chimney
-    P(10, 1, 3, 3, out);
-    P(11, 2, 1, 1, '#3a322c');
-    chute(P, out);
-  });
-}
-
-function assemblerFrame(f) {
-  return sprite(16, 16, (P) => {
-    const out = '#121a24';
-    frameBox(P, '#4f6d8f', '#7898bb', '#34506e', out);
-    P(3, 3, 9, 9, '#3d5775');
-    const g = '#c8d2dc';
-    P(5, 5, 5, 5, g);
-    P(6, 6, 3, 3, '#3d5775');
-    P(7, 7, 1, 1, g);
-    if (f === 0) {
-      P(7, 3, 1, 2, g); P(7, 10, 1, 2, g); P(3, 7, 2, 1, g); P(10, 7, 2, 1, g);
-    } else {
-      P(4, 4, 1, 1, g); P(10, 4, 1, 1, g); P(4, 10, 1, 1, g); P(10, 10, 1, 1, g);
-    }
-    // status light
-    P(3, 12, 2, 1, f === 0 ? '#2f9e4f' : '#7be38f');
-    chute(P, out);
-  });
-}
-
-function foundryFrame(f) {
-  return sprite(16, 16, (P) => {
-    const out = '#1c0c0c';
-    frameBox(P, '#6b2f2f', '#9a4a3a', '#3d1a1a', out);
-    P(3, 3, 9, 10, out);
-    P(4, 4, 7, 8, '#2a1414');
-    if (f > 0) {
-      P(5, 6, 5, 5, f === 1 ? '#ff6a1a' : '#e04a10');
-      P(6, 7, 3, 2, f === 1 ? '#ffd36b' : '#ffae3a');
-    } else {
-      P(5, 9, 5, 2, '#5a2010');
-    }
-    P(4, 4, 7, 1, '#4a2420');
-    chute(P, out);
-  });
-}
-
-function sellerFrame(f) {
-  return sprite(16, 16, (P) => {
-    const out = '#0f2416';
-    frameBox(P, '#2f6b3f', '#4d9a5e', '#1d4528', out);
-    // input slots on all four sides
-    P(7, 0, 2, 2, out); P(7, 14, 2, 2, out); P(0, 7, 2, 2, out); P(14, 7, 2, 2, out);
-    // coin
-    const coin = f ? '#ffe07a' : '#f2c94c';
-    P(5, 4, 6, 8, coin);
-    P(4, 5, 8, 6, coin);
-    P(5, 4, 6, 1, '#fff1b8');
-    const s = '#a07b14';
-    P(7, 4, 2, 1, s); P(6, 5, 4, 1, s); P(6, 6, 1, 1, s); P(6, 7, 4, 1, s);
-    P(9, 8, 1, 1, s); P(6, 9, 4, 1, s); P(7, 10, 2, 1, s);
-  });
-}
-
-function splitterFrame(f) {
-  return sprite(16, 16, (P) => {
-    P(0, 0, 16, 16, '#24242b');
-    P(1, 1, 14, 14, '#3a3a44');
-    P(2, 2, 12, 12, '#2d2d35');
-    const a = f ? '#ffe07a' : '#e0c040';
-    // input stub west
-    P(0, 6, 3, 4, '#5f5f6c');
-    // east arrow
-    P(10, 5, 1, 6, a); P(11, 6, 1, 4, a); P(12, 7, 1, 2, a);
-    // north arrow
-    P(5, 4, 6, 1, a); P(6, 3, 4, 1, a); P(7, 2, 2, 1, a);
-    // south arrow
-    P(5, 11, 6, 1, a); P(6, 12, 4, 1, a); P(7, 13, 2, 1, a);
-    P(5, 7, 5, 2, a);
+    beltBase(P);
+    // grooves
+    for (let x = 0; x < 16; x++) if ((x + 16 - f) % 4 === 0) { P(x, 3, 1, 1, PAL.groove); P(x, 12, 1, 1, PAL.groove); }
+    chevrons(P, f);
+    for (const bx of [3, 11]) { P(bx, 1, 1, 1, PAL.white); P(bx, 13, 1, 1, PAL.mist); }
   });
 }
 
 // Curved belt: items arrive from the SOUTH and leave EAST (mirror for north).
 function beltCurveFrame(f) {
   return sprite(16, 16, (P) => {
-    P(0, 0, 16, 16, '#24242b');
-    P(2, 2, 14, 14, '#2d2d35');
-    const c = '#45454f';
-    // east-moving chevrons on the output leg (x >= 8)
+    P(0, 0, 16, 16, K);
+    P(3, 3, 13, 13, PAL.slate);
+    // outer rails (top + left)
+    P(0, 1, 16, 1, PAL.mist); P(0, 2, 16, 1, PAL.steel);
+    P(1, 0, 1, 16, PAL.mist); P(2, 2, 1, 14, PAL.steel);
+    // inner corner post
+    P(13, 13, 3, 3, PAL.steel); P(14, 14, 2, 2, PAL.mist);
+    // east-moving chevrons on the output leg
+    chevrons(P, f, 8, 16);
+    // north-moving chevrons on the input leg
     for (let k = 0; k < 2; k++) {
-      const cx = k * 8 + f;
-      for (let i = 0; i < 4; i++) for (const t of [0, 1]) {
-        const x = (cx + i + t) % 16;
-        if (x < 8) continue;
-        P(x, 4 + i, 1, 1, c);
-        P(x, 11 - i, 1, 1, c);
-      }
-    }
-    // north-moving chevrons on the input leg (y >= 8)
-    for (let k = 0; k < 2; k++) {
-      const cy = 15 - ((k * 8 + f) % 16);
-      for (let i = 0; i < 4; i++) for (const t of [0, 1]) {
+      const cy = (32 - (k * 8 + f)) % 16;
+      for (let i = 0; i < 3; i++) for (const t of [0, 1]) {
         const y = (cy - i - t + 32) % 16;
-        if (y < 8) continue;
-        P(4 + i, y, 1, 1, c);
-        P(11 - i, y, 1, 1, c);
+        if (y < 8 || y > 12) continue;
+        P(5 + i, y, 1, 1, PAL.slate2);
+        P(10 - i, y, 1, 1, PAL.slate2);
       }
     }
-    // outer rails (top + left) and inner corner post
-    P(0, 0, 16, 2, '#5f5f6c');
-    P(0, 1, 16, 1, '#474752');
-    P(0, 0, 2, 16, '#5f5f6c');
-    P(1, 2, 1, 14, '#474752');
-    P(14, 14, 2, 2, '#5f5f6c');
-    P(3, 0, 1, 1, '#8a8a98'); P(11, 0, 1, 1, '#8a8a98'); P(0, 11, 1, 1, '#8a8a98');
+    P(3, 1, 1, 1, PAL.white); P(11, 1, 1, 1, PAL.white); P(1, 11, 1, 1, PAL.white);
   });
 }
 
-function chestFrame(f) {
+function minerFrame(f) {
   return sprite(16, 16, (P) => {
-    const out = '#2a1a0c';
-    frameBox(P, '#8a5a2b', '#b07a40', '#5e3c1a', out);
-    for (const y of [5, 9]) P(2, y, 11, 1, '#5e3c1a');
-    P(2, 3, 11, 1, '#6e7480'); P(2, 12, 11, 1, '#6e7480');
-    P(3, 2, 1, 12, '#6e7480'); P(11, 2, 1, 12, '#6e7480');
-    P(6, 6, 3, 3, f ? '#ffe07a' : '#f2c94c');
-    P(7, 7, 1, 1, out);
-    chute(P, out);
+    // base plate
+    box(P, 0, 1, 15, 15, PAL.steel, PAL.mist, PAL.slate);
+    for (const [x, y] of [[2, 3], [12, 3], [2, 13], [12, 13]]) P(x, y, 1, 1, PAL.slate);
+    // housing (bobs while working)
+    const b = f % 2;
+    box(P, 2, 3 + b, 11, 10, PAL.gold, '#fff1c4', PAL.orange);
+    // hazard band
+    for (let x = 3; x < 12; x++) P(x, 4 + b, 1, 1, ((x + f) >> 1) & 1 ? K : PAL.gold);
+    // drill window
+    P(4, 6 + b, 7, 5, K);
+    P(5, 7 + b, 5, 3, PAL.mist);
+    const s = PAL.slate;
+    const pat = [[[7, 7], [7, 8], [7, 9], [5, 8], [6, 8], [8, 8], [9, 8]], [[5, 7], [6, 7], [8, 9], [9, 9], [7, 8]], [[7, 7], [7, 8], [7, 9], [5, 8], [6, 8], [8, 8], [9, 8]], [[9, 7], [8, 7], [6, 9], [5, 9], [7, 8]]][f];
+    for (const [x, y] of pat) P(x, y + b, 1, 1, s);
+    P(5, 7 + b, 5, 1, PAL.white);
+    // beacon
+    P(3, 2, 2, 2, K);
+    P(3, 2, 1, 1, f < 2 ? PAL.lime : PAL.green);
+    port(P, f < 2);
   });
 }
 
-function tunnelFrame(mode, f) {
+function smelterFrame(f) {
   return sprite(16, 16, (P) => {
-    // belt half
-    const bx = mode === 'in' ? 0 : 8;
-    P(bx, 0, 8, 16, '#24242b');
-    P(bx, 2, 8, 12, '#2d2d35');
-    for (let i = 0; i < 4; i++) {
-      const x = bx + ((f + i) % 8);
-      P(x, 4 + i, 1, 1, '#45454f'); P(x, 11 - i, 1, 1, '#45454f');
+    box(P, 0, 1, 15, 15, PAL.steel, PAL.mist, PAL.slate);
+    // brick courses
+    for (let r = 0; r < 4; r++) {
+      const y = 3 + r * 3;
+      P(1, y, 13, 1, PAL.slate);
+      for (let x = 1 + (r % 2) * 3; x < 14; x += 6) P(x, y - 2 < 2 ? 2 : y - 2, 1, 2, PAL.slate);
     }
-    P(bx, 0, 8, 2, '#5f5f6c'); P(bx, 14, 8, 2, '#5f5f6c');
-    // portal housing
-    const hx = mode === 'in' ? 7 : 0;
-    P(hx, 0, 9, 16, '#3c3a36');
-    P(hx + 1, 1, 7, 14, '#57534c');
-    P(hx + 1, 1, 7, 1, '#77726a');
-    const mx = mode === 'in' ? hx + 1 : hx + 2;
-    P(mx, 3, 6, 10, '#0b0b0e');
-    P(mx, 3, 6, 1, '#1d1d24');
-    // hazard trim
-    for (let y = 1; y < 15; y += 2) P(mode === 'in' ? hx : hx + 8, y, 1, 1, '#f2c94c');
-    P(mode === 'in' ? 10 : 3, 7, 2, 2, mode === 'in' ? '#7be38f' : '#7fe0ff');
+    // mouth (arched)
+    P(3, 7, 9, 8, K);
+    P(4, 6, 7, 1, K);
+    P(4, 7, 7, 7, PAL.ink);
+    P(4, 7, 7, 1, PAL.groove);
+    if (f > 0) {
+      const hot = f === 1;
+      P(4, 10, 7, 4, hot ? PAL.orange : PAL.red);
+      P(5, 9, 5, 3, hot ? PAL.gold : PAL.orange);
+      P(6, 8, 3, 2, hot ? PAL.white : PAL.gold);
+      P(hot ? 5 : 8, 8, 1, 1, PAL.gold);
+      P(4, 14, 7, 1, PAL.red);
+    } else {
+      P(4, 12, 7, 2, '#3a1e2a');
+      P(5, 13, 2, 1, PAL.plum);
+    }
+    // chimney
+    P(10, 0, 4, 4, K);
+    P(11, 0, 2, 3, PAL.slate2);
+    P(11, 0, 2, 1, f ? PAL.orange : PAL.steel);
+    port(P, f > 0);
+  });
+}
+
+function assemblerFrame(f) {
+  return sprite(16, 16, (P) => {
+    box(P, 0, 1, 15, 15, PAL.blue, PAL.sky, PAL.navy);
+    // work bed
+    P(2, 8, 11, 6, K);
+    P(3, 9, 9, 4, PAL.navy);
+    P(3, 9, 9, 1, PAL.slate2);
+    // part on the bed
+    P(5 + (f % 2), 10, 3, 2, PAL.mist);
+    // robotic arm: shoulder top-left, sweeps across
+    const tips = [[6, 8], [8, 8], [10, 8], [8, 8]];
+    const [tx, ty] = tips[f];
+    P(2, 2, 3, 3, K);
+    P(3, 3, 1, 1, PAL.gold);
+    for (let i = 0; i <= 6; i++) {
+      const x = Math.round(3 + ((tx - 3) * i) / 6), y = Math.round(4 + ((ty - 2 - 4) * i) / 6);
+      P(x, y, 2, 1, PAL.mist);
+    }
+    P(tx - 1, ty - 2, 3, 1, K);
+    P(tx - 1, ty - 1, 1, 1, PAL.gold); P(tx + 1, ty - 1, 1, 1, PAL.gold);
+    // status lights
+    P(11, 3, 2, 1, f % 2 ? PAL.lime : PAL.green);
+    P(11, 5, 2, 1, PAL.cyan);
+    port(P, true);
+  });
+}
+
+function foundryFrame(f) {
+  return sprite(16, 16, (P) => {
+    box(P, 0, 1, 15, 15, PAL.plum, '#8a3c6e', '#3a1838');
+    // rivets
+    for (const [x, y] of [[2, 3], [12, 3], [2, 13], [12, 13]]) P(x, y, 1, 1, PAL.red);
+    // crucible
+    disc(P, 7.5, 8.5, 5, K);
+    disc(P, 7.5, 8.5, 4, '#2a1428');
+    if (f > 0) {
+      disc(P, 7.5, 8.5, 3.4, f === 1 ? PAL.orange : PAL.red);
+      disc(P, 7.5, 8, 2.2, f === 1 ? PAL.gold : PAL.orange);
+      P(f === 1 ? 6 : 8, 7, 1, 1, PAL.white);
+      P(f === 1 ? 9 : 5, 9, 1, 1, PAL.gold);
+    } else {
+      disc(P, 7.5, 9, 3, '#4a2030');
+    }
+    // pipe
+    P(12, 1, 2, 5, K); P(12, 1, 1, 4, PAL.mist);
+    port(P, f > 0);
+  });
+}
+
+function sellerFrame(f) {
+  return sprite(16, 16, (P) => {
+    // counter
+    box(P, 1, 7, 14, 9, PAL.wood, PAL.woodL, PAL.woodD);
+    P(2, 11, 12, 1, PAL.woodD);
+    // coin sign
+    disc(P, 8, 11.5, 2.6, K);
+    disc(P, 8, 11.5, 1.9, f ? '#fff6c8' : PAL.gold);
+    P(8, 10, 1, 3, PAL.orange);
+    // posts
+    P(1, 4, 2, 4, K); P(13, 4, 2, 4, K);
+    P(1, 4, 1, 3, PAL.woodL); P(14, 4, 1, 3, PAL.woodL);
+    // striped awning with scalloped edge
+    P(0, 0, 16, 6, K);
+    for (let x = 1; x < 15; x++) {
+      const col = ((x - 1) >> 1) % 2 ? PAL.white : PAL.red;
+      P(x, 1, 1, 4, col);
+      if (x % 2) P(x, 5, 1, 1, col);
+    }
+    P(1, 1, 14, 1, f ? PAL.gold : '#ffd9c8');
+    // sparkle when selling
+    if (f) { P(13, 9, 1, 3, PAL.white); P(12, 10, 3, 1, PAL.white); }
+  });
+}
+
+function splitterFrame(f) {
+  return sprite(16, 16, (P) => {
+    beltBase(P);
+    box(P, 2, 2, 12, 12, PAL.slate2, PAL.steel, PAL.slate);
+    const a = f ? PAL.gold : PAL.orange;
+    // east arrow
+    P(10, 6, 1, 4, a); P(11, 7, 1, 2, a);
+    // north / south arrows
+    P(6, 4, 4, 1, a); P(7, 3, 2, 1, a);
+    P(6, 11, 4, 1, a); P(7, 12, 2, 1, a);
+    // hub
+    P(5, 6, 4, 4, K); P(6, 7, 2, 2, a);
   });
 }
 
 function sorterFrame(f) {
   return sprite(16, 16, (P) => {
-    P(0, 0, 16, 16, '#24242b');
-    P(1, 1, 14, 14, '#4a3a5c');
-    P(2, 2, 12, 12, '#2d2d35');
-    P(0, 6, 3, 4, '#5f5f6c');
-    const a = f ? '#e0b0ff' : '#b07ae0';
-    // east arrow
-    P(11, 6, 1, 4, a); P(12, 7, 1, 2, a);
-    // side arrows
-    P(6, 2, 4, 1, a); P(7, 1, 2, 1, a);
-    P(6, 13, 4, 1, a); P(7, 14, 2, 1, a);
-    // filter frame
-    P(4, 4, 8, 8, '#16161b');
-    P(5, 5, 6, 6, '#3a3a44');
+    beltBase(P);
+    box(P, 2, 2, 12, 12, PAL.plum, '#8a3c6e', '#3a1838');
+    const a = f ? PAL.cyan : PAL.sky;
+    P(12, 6, 1, 4, a); P(13, 7, 1, 2, a);
+    P(6, 3, 4, 1, a); P(7, 2, 2, 1, a);
+    P(6, 12, 4, 1, a); P(7, 13, 2, 1, a);
+    // filter window
+    P(4, 4, 8, 8, K);
+    P(5, 5, 6, 6, PAL.slate);
+    P(5, 5, 6, 1, PAL.slate2);
+  });
+}
+
+function chestFrame(f) {
+  return sprite(16, 16, (P) => {
+    box(P, 1, 2, 14, 13, PAL.wood, PAL.woodL, PAL.woodD);
+    // lid seam + planks
+    P(2, 6, 12, 1, K);
+    P(2, 10, 12, 1, PAL.woodD);
+    P(2, 3, 12, 1, PAL.woodL);
+    // metal corners
+    for (const [x, y] of [[1, 2], [13, 2], [1, 13], [13, 13]]) { P(x, y, 2, 2, PAL.mist); P(x, y, 1, 1, PAL.white); }
+    // lock
+    P(6, 5, 4, 4, K);
+    P(7, 6, 2, 2, f ? PAL.white : PAL.gold);
+    port(P, f);
+  });
+}
+
+function tunnelFrame(mode, f) {
+  return sprite(16, 16, (P) => {
+    const bx = mode === 'in' ? 0 : 8;
+    // belt half
+    P(bx, 0, 8, 16, K);
+    P(bx, 3, 8, 10, PAL.slate);
+    P(bx, 1, 8, 1, PAL.mist); P(bx, 2, 8, 1, PAL.steel);
+    P(bx, 13, 8, 1, PAL.steel); P(bx, 14, 8, 1, PAL.slate2);
+    for (let i = 0; i < 3; i++) {
+      const x = bx + ((f + i) % 8);
+      P(x, 5 + i, 1, 1, PAL.slate2); P(x, 10 - i, 1, 1, PAL.slate2);
+    }
+    // stone arch
+    const hx = mode === 'in' ? 6 : 0;
+    P(hx, 0, 10, 16, K);
+    P(hx + 1, 1, 8, 14, PAL.steel);
+    for (let y = 2; y < 15; y += 3) P(hx + 1, y, 8, 1, PAL.slate);
+    P(hx + 1, 1, 8, 1, PAL.mist);
+    // dark opening
+    const mx = mode === 'in' ? hx + 1 : hx + 3;
+    P(mx, 3, 6, 11, K);
+    P(mx + 1, 2, 4, 1, K);
+    P(mx, 3, 6, 1, PAL.deep);
+    // moss
+    P(hx + 1, 14, 2, 1, PAL.green); P(hx + 7, 1, 2, 1, PAL.green); P(hx + 8, 2, 1, 1, PAL.leafD);
+    // signal light
+    P(mode === 'in' ? 13 : 2, 1, 2, 1, mode === 'in' ? PAL.lime : PAL.cyan);
   });
 }
 
 function launchpadFrame(f) {
   return sprite(16, 16, (P) => {
-    P(0, 0, 16, 16, '#1b1e24');
-    P(1, 1, 14, 14, '#4a505c');
-    P(2, 2, 12, 12, '#5d6573');
-    for (let i = 0; i < 16; i += 2) { P(i, 0, 1, 1, '#f2c94c'); P(i + 1, 15, 1, 1, '#f2c94c'); P(0, i + 1, 1, 1, '#f2c94c'); P(15, i, 1, 1, '#f2c94c'); }
-    P(4, 4, 8, 8, '#2a2f38');
-    P(5, 5, 6, 6, f ? '#ff8a2a' : '#3a404c');
-    P(1, 1, 2, 2, f ? '#ff5a4a' : '#7a2a2a'); P(13, 13, 2, 2, f ? '#ff5a4a' : '#7a2a2a');
+    box(P, 0, 0, 16, 16, PAL.mist, PAL.white, PAL.steel);
+    for (let i = 1; i < 15; i++) {
+      const c = ((i >> 1) % 2) ? K : PAL.gold;
+      P(i, 1, 1, 1, c); P(i, 14, 1, 1, c); P(1, i, 1, 1, c); P(14, i, 1, 1, c);
+    }
+    disc(P, 8, 8, 5, PAL.slate);
+    disc(P, 8, 8, 4, PAL.slate2);
+    P(4, 7, 8, 2, PAL.steel); P(7, 4, 2, 8, PAL.steel);
+    P(2, 2, 2, 2, f ? PAL.red : '#5a1e2a'); P(12, 12, 2, 2, f ? PAL.red : '#5a1e2a');
+    P(12, 2, 2, 2, f ? '#5a1e2a' : PAL.red); P(2, 12, 2, 2, f ? '#5a1e2a' : PAL.red);
   });
 }
 
 function rocketSprite() {
   return sprite(12, 28, (P) => {
-    const o = '#1b2129';
     // nose
-    P(5, 0, 2, 1, o); P(4, 1, 4, 1, o); P(3, 2, 6, 2, o);
-    P(5, 1, 2, 1, '#ff5a4a'); P(4, 2, 4, 2, '#ff5a4a');
+    P(5, 0, 2, 1, K); P(4, 1, 4, 1, K); P(3, 2, 6, 3, K);
+    P(5, 1, 1, 1, PAL.orange); P(4, 2, 4, 3, PAL.red); P(4, 2, 1, 2, PAL.orange);
     // body
-    P(3, 4, 6, 18, o);
-    P(4, 4, 4, 18, '#e6edf4');
-    P(7, 4, 1, 18, '#9fb0c0');
-    P(4, 8, 4, 1, '#3d5775');
+    P(2, 5, 8, 17, K);
+    P(3, 5, 6, 17, PAL.white);
+    P(7, 5, 2, 17, PAL.mist);
+    P(3, 5, 1, 17, '#ffffff');
+    P(3, 9, 6, 1, PAL.navy);
     // window
-    P(5, 10, 2, 3, '#7fe0ff'); P(5, 10, 1, 1, '#e8fbff');
-    P(4, 16, 4, 1, '#ff5a4a');
+    P(4, 11, 4, 4, K); P(5, 12, 2, 2, PAL.cyan); P(5, 12, 1, 1, PAL.white);
+    P(3, 17, 6, 1, PAL.red); P(3, 19, 6, 1, PAL.red);
     // fins
-    P(1, 18, 2, 6, o); P(2, 19, 1, 4, '#ff5a4a');
-    P(9, 18, 2, 6, o); P(9, 19, 1, 4, '#ff5a4a');
+    P(0, 17, 3, 7, K); P(1, 18, 1, 5, PAL.red);
+    P(9, 17, 3, 7, K); P(10, 18, 1, 5, PAL.red);
     // nozzle
-    P(4, 22, 4, 2, '#4a505c'); P(3, 24, 6, 1, o);
+    P(3, 22, 6, 3, K); P(4, 22, 4, 2, PAL.steel);
+    P(2, 25, 8, 1, K);
+  });
+}
+
+// ------------------------------- nature ------------------------------------
+function treeSprite(v) {
+  // returns { trunk, canopy } so the canopy can sway independently
+  const trunk = sprite(16, 24, (P) => {
+    P(6, 15, 4, 8, K);
+    P(7, 15, 2, 7, PAL.wood);
+    P(7, 15, 1, 7, PAL.woodL);
+    P(5, 21, 6, 2, K); P(6, 21, 4, 1, PAL.woodD);
+  });
+  const canopy = sprite(16, 24, (P) => {
+    if (v === 1) {
+      // round broadleaf
+      disc(P, 8, 9, 7.2, PAL.leafO);
+      disc(P, 8, 9.5, 6.3, PAL.leafD);
+      disc(P, 7.2, 8.4, 5.2, PAL.leafM);
+      disc(P, 6.2, 7, 3.4, PAL.leafL);
+      disc(P, 5.6, 5.8, 1.4, PAL.leafH);
+      P(10, 11, 2, 1, PAL.leafM); P(4, 12, 2, 1, PAL.leafD);
+      // apples / flowers on some trees
+      P(10, 6, 1, 1, PAL.red); P(4, 10, 1, 1, PAL.red); P(11, 10, 1, 1, PAL.red);
+    } else {
+      // pine
+      const tiers = [[3, 2], [7, 3.6], [11, 5], [15, 6.2]];
+      for (let i = tiers.length - 1; i >= 0; i--) {
+        const [yb, half] = tiers[i];
+        for (let y = 0; y < 6; y++) {
+          const hw = Math.round((half * (y + 1)) / 6);
+          const yy = yb - 5 + y + 2;
+          P(8 - hw - 1, yy, hw * 2 + 2, 1, PAL.leafO);
+          P(8 - hw, yy, hw * 2, 1, PAL.teal);
+          P(8 - hw, yy, Math.max(1, hw - 1), 1, PAL.leafM);
+        }
+      }
+      P(7, 0, 2, 1, PAL.leafO); P(7, 1, 1, 1, PAL.leafH);
+      P(6, 9, 1, 1, PAL.leafH); P(5, 13, 1, 1, PAL.leafH); P(4, 17, 1, 1, PAL.leafH);
+    }
+  });
+  return { trunk, canopy };
+}
+
+function bushSprite() {
+  return sprite(16, 16, (P) => {
+    disc(P, 6, 10.5, 4.2, PAL.leafO);
+    disc(P, 10.5, 11, 3.8, PAL.leafO);
+    disc(P, 6, 10.5, 3.3, PAL.leafD);
+    disc(P, 10.5, 11, 2.9, PAL.leafM);
+    disc(P, 5.5, 9.5, 2, PAL.leafL);
+    P(4, 8, 1, 1, PAL.leafH);
+    P(8, 10, 1, 1, PAL.red); P(11, 9, 1, 1, PAL.red); P(6, 12, 1, 1, PAL.red);
+  });
+}
+
+function rockSprite() {
+  return sprite(16, 16, (P) => {
+    P(3, 9, 10, 5, K); P(4, 8, 8, 1, K); P(5, 7, 5, 1, K);
+    P(4, 9, 8, 4, PAL.steel);
+    P(5, 8, 6, 1, PAL.mist); P(4, 9, 4, 1, PAL.mist); P(5, 8, 2, 1, PAL.white);
+    P(9, 11, 3, 2, PAL.slate);
+    P(4, 12, 2, 1, PAL.green);
+  });
+}
+
+function cloudSprite(seed) {
+  const rng = mulberry32(seed);
+  return sprite(96, 48, (P) => {
+    for (let i = 0; i < 9; i++) disc(P, 20 + rng() * 56, 18 + rng() * 14, 9 + rng() * 9, '#000');
   });
 }
 
@@ -474,20 +612,24 @@ const SPR = {
   tunnelOut: [],
   launchpad: [],
   rocket: null,
+  trees: [],
+  bush: null,
+  rock: null,
+  clouds: [],
+  coin: null,
   icons: {},
 };
 
 function buildSprites() {
-  for (const [id, [shape, pal]] of Object.entries(ITEM_ART)) {
-    SPR.items[id] = fromStrings(SHAPES[shape], pal);
-  }
+  for (const [id, [shape, pal]] of Object.entries(ITEM_ART)) SPR.items[id] = fromStrings(SHAPES[shape], pal);
+  SPR.coin = fromStrings(SHAPES.coin, { a: '#fff6c8', b: PAL.gold, c: PAL.orange, d: K });
   for (let f = 0; f < 8; f++) SPR.belt.push(beltFrame(f));
   for (let f = 0; f < 8; f++) SPR.beltCurve.push(beltCurveFrame(f));
   for (let f = 0; f < 8; f++) SPR.tunnel.push(tunnelFrame('in', f));
   for (let f = 0; f < 8; f++) SPR.tunnelOut.push(tunnelFrame('out', f));
-  for (let f = 0; f < 2; f++) SPR.miner.push(minerFrame(f));
+  for (let f = 0; f < 4; f++) SPR.miner.push(minerFrame(f));
   for (let f = 0; f < 3; f++) SPR.smelter.push(smelterFrame(f));
-  for (let f = 0; f < 2; f++) SPR.assembler.push(assemblerFrame(f));
+  for (let f = 0; f < 4; f++) SPR.assembler.push(assemblerFrame(f));
   for (let f = 0; f < 3; f++) SPR.foundry.push(foundryFrame(f));
   for (let f = 0; f < 2; f++) SPR.seller.push(sellerFrame(f));
   for (let f = 0; f < 2; f++) SPR.splitter.push(splitterFrame(f));
@@ -495,6 +637,10 @@ function buildSprites() {
   for (let f = 0; f < 2; f++) SPR.chest.push(chestFrame(f));
   for (let f = 0; f < 2; f++) SPR.launchpad.push(launchpadFrame(f));
   SPR.rocket = rocketSprite();
+  SPR.trees = [null, treeSprite(1), treeSprite(2)];
+  SPR.bush = bushSprite();
+  SPR.rock = rockSprite();
+  for (let i = 0; i < 4; i++) SPR.clouds.push(cloudSprite(77 + i));
   for (const id of BUILD_ORDER) SPR.icons[id] = SPR[id][id === 'smelter' || id === 'foundry' ? 1 : 0];
 }
 
@@ -503,7 +649,7 @@ const ICON_URL = {};
 function iconURL(kind, id) {
   const key = kind + ':' + id;
   if (!ICON_URL[key]) {
-    const src = kind === 'item' ? SPR.items[id] : SPR.icons[id];
+    const src = kind === 'item' ? SPR.items[id] : kind === 'coin' ? SPR.coin : SPR.icons[id];
     ICON_URL[key] = src.toDataURL();
   }
   return ICON_URL[key];
@@ -511,48 +657,127 @@ function iconURL(kind, id) {
 
 // ------------------------------- terrain -----------------------------------
 const ORE_COLORS = {
-  iron_ore:   ['#c3cad6', '#8a93a3', '#4d5462'],
-  copper_ore: ['#f2a46a', '#c0642f', '#6e3417'],
-  stone:      ['#c9bfae', '#958a7b', '#5a5248'],
-  coal:       ['#5a5a68', '#33333d', '#141418'],
-  gold_ore:   ['#fff0a0', '#e8b830', '#8a6210'],
+  iron_ore:   [PAL.white, PAL.mist, PAL.steel],
+  copper_ore: ['#ffc59a', PAL.orange, '#a5482f'],
+  stone:      ['#e2d6c2', '#b3a58d', '#7d705e'],
+  coal:       [PAL.steel, PAL.slate, '#07070c'],
+  gold_ore:   ['#fff6c8', PAL.gold, '#c98f3a'],
 };
 
 function renderTerrain(game) {
-  const c = mkCanvas(game.w * TILE, game.h * TILE);
+  const W = game.w, H = game.h;
+  const c = mkCanvas(W * TILE, H * TILE);
   const g = c.getContext('2d');
   const rng = mulberry32(game.seed ^ 0x5eed);
   const P = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
-  const grounds = ['#2c3529', '#2e382b', '#2a3327'];
-  for (let ty = 0; ty < game.h; ty++) {
-    for (let tx = 0; tx < game.w; tx++) {
+  const water = (x, y) => game.isWater(x, y);
+  const ore = (x, y) => game.oreAt(x, y);
+
+  // 1. grass: smooth large-scale tone, dithered in 2x2 clumps so no tile grid shows
+  {
+    const PW = W * TILE, PH = H * TILE;
+    const img = g.createImageData(PW, PH);
+    const d = img.data;
+    const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const cols = [hex(PAL.grassDD), hex(PAL.grassD), hex(PAL.grass), hex(PAL.grassL)];
+    const k1 = 0.21 / TILE, k2 = 0.07 / TILE, k3 = 0.17 / TILE, k4 = 0.11 / TILE, k5 = 0.6 / TILE;
+    const seedOff = (game.seed % 1000) * 0.37;
+    for (let y = 0; y < PH; y++) {
+      for (let x = 0; x < PW; x++) {
+        const tone = (Math.sin(x * k1 + y * k2 + seedOff) + Math.sin(y * k3 - x * k4) + Math.sin((x + y) * k5) * 0.35 + 2.35) / 4.7;
+        const cx = x >> 1, cy = y >> 1;
+        let hsh = (cx * 374761393 + cy * 668265263) | 0;
+        hsh = Math.imul(hsh ^ (hsh >>> 13), 1274126177);
+        const dither = (((hsh ^ (hsh >>> 16)) >>> 0) & 1023) / 1023 - 0.5;
+        const v = tone + dither * 0.32;
+        const c = cols[v < 0.3 ? 0 : v < 0.47 ? 1 : v < 0.68 ? 2 : 3];
+        const o = (y * PW + x) * 4;
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+  for (let ty = 0; ty < H; ty++) {
+    for (let tx = 0; tx < W; tx++) {
       const ox = tx * TILE, oy = ty * TILE;
-      P(ox, oy, TILE, TILE, grounds[(rng() * grounds.length) | 0]);
-      // speckles
-      const n = 4 + ((rng() * 5) | 0);
-      for (let i = 0; i < n; i++) {
+      // blades & speckles
+      for (let i = 0; i < 7; i++) {
+        const x = ox + ((rng() * 16) | 0), y = oy + ((rng() * 15) | 0);
         const r = rng();
-        P(ox + ((rng() * 16) | 0), oy + ((rng() * 16) | 0), 1, 1, r < 0.5 ? '#36412f' : r < 0.85 ? '#242c21' : '#46523b');
+        if (r < 0.5) { P(x, y, 1, 2, PAL.grassDD); }
+        else if (r < 0.85) { P(x, y, 1, 1, PAL.grassH); }
+        else { P(x, y, 1, 1, PAL.grassD); }
       }
-      if (rng() < 0.08) {
-        const px = ox + 2 + ((rng() * 11) | 0), py = oy + 2 + ((rng() * 11) | 0);
-        P(px, py, 2, 1, '#4a5340');
-        P(px, py + 1, 2, 1, '#1e251b');
+      // grass tufts
+      if (rng() < 0.3) {
+        const x = ox + 2 + ((rng() * 11) | 0), y = oy + 3 + ((rng() * 10) | 0);
+        P(x, y, 1, 2, PAL.grassH); P(x - 1, y + 1, 1, 1, PAL.grassH); P(x + 1, y + 1, 1, 1, PAL.grassH);
+        P(x - 1, y + 2, 3, 1, PAL.grassDD);
       }
-      // ore
-      const ore = game.ore[ty * game.w + tx];
-      if (ore) {
-        const [hi, mid, lo] = ORE_COLORS[ore];
-        P(ox, oy, TILE, TILE, 'rgba(0,0,0,0.18)');
-        const rocks = 4 + ((rng() * 3) | 0);
-        for (let i = 0; i < rocks; i++) {
-          const w = 2 + ((rng() * 3) | 0), h = 2 + ((rng() * 2) | 0);
-          const rx = ox + 1 + ((rng() * (14 - w)) | 0);
-          const ry = oy + 1 + ((rng() * (13 - h)) | 0);
-          P(rx, ry + 1, w, h, lo);
-          P(rx, ry, w, h, mid);
-          P(rx, ry, w - 1, 1, hi);
+      // flowers
+      if (rng() < 0.12) {
+        const cols = [PAL.gold, PAL.white, '#f59a7a', PAL.cyan, '#e8a0ff'];
+        const fc = cols[(rng() * cols.length) | 0];
+        const n = 1 + ((rng() * 3) | 0);
+        for (let k = 0; k < n; k++) {
+          const x = ox + 2 + ((rng() * 12) | 0), y = oy + 2 + ((rng() * 12) | 0);
+          P(x, y + 1, 1, 1, PAL.grassDD);
+          P(x, y, 1, 1, fc);
         }
+      }
+    }
+  }
+
+  // 2. ore deposits: dug-out dirt mounds with chunky rocks
+  for (let ty = 0; ty < H; ty++) {
+    for (let tx = 0; tx < W; tx++) {
+      const o = ore(tx, ty);
+      if (!o) continue;
+      const ox = tx * TILE, oy = ty * TILE;
+      P(ox, oy, TILE, TILE, PAL.dirt);
+      // soft rim where the deposit meets grass
+      if (ore(tx, ty - 1) !== o) { P(ox, oy, TILE, 1, PAL.grassDD); P(ox, oy + 1, TILE, 1, PAL.dirtL); }
+      if (ore(tx, ty + 1) !== o) P(ox, oy + 15, TILE, 1, PAL.dirtD);
+      if (ore(tx - 1, ty) !== o) P(ox, oy, 1, TILE, PAL.dirtD);
+      if (ore(tx + 1, ty) !== o) P(ox + 15, oy, 1, TILE, PAL.dirtD);
+      for (let i = 0; i < 6; i++) P(ox + ((rng() * 16) | 0), oy + ((rng() * 16) | 0), 1, 1, rng() < 0.5 ? PAL.dirtD : PAL.dirtL);
+      const [hi, mid, lo] = ORE_COLORS[o];
+      const rocks = 3 + ((rng() * 3) | 0);
+      for (let i = 0; i < rocks; i++) {
+        const w = 3 + ((rng() * 3) | 0), h = 2 + ((rng() * 2) | 0);
+        const rx = ox + 1 + ((rng() * (14 - w)) | 0);
+        const ry = oy + 1 + ((rng() * (13 - h)) | 0);
+        P(rx - 1, ry, w + 2, h + 1, K);
+        P(rx, ry - 1, w, 1, K);
+        P(rx, ry, w, h, mid);
+        P(rx, ry + h - 1, w, 1, lo);
+        P(rx, ry, w - 1, 1, hi);
+        P(rx - 1, ry + h + 1, w + 2, 1, 'rgba(0,0,0,0.25)');
+      }
+    }
+  }
+
+  // 3. water with sandy shores
+  for (let ty = 0; ty < H; ty++) {
+    for (let tx = 0; tx < W; tx++) {
+      if (!water(tx, ty)) continue;
+      const ox = tx * TILE, oy = ty * TILE;
+      const deep = water(tx - 1, ty) && water(tx + 1, ty) && water(tx, ty - 1) && water(tx, ty + 1);
+      P(ox, oy, TILE, TILE, deep ? PAL.water : PAL.waterL);
+      if (deep) {
+        for (let i = 0; i < 3; i++) P(ox + ((rng() * 14) | 0), oy + ((rng() * 16) | 0), 3, 1, PAL.waterD);
+      }
+      // shore: sand + foam on edges that touch land
+      const edge = (dx, dy, fn) => { if (!water(tx + dx, ty + dy)) fn(); };
+      edge(0, -1, () => { P(ox, oy, TILE, 2, '#e4c590'); P(ox, oy + 2, TILE, 1, PAL.cyan); });
+      edge(0, 1, () => { P(ox, oy + 14, TILE, 2, '#c9a26b'); P(ox, oy + 13, TILE, 1, PAL.cyan); });
+      edge(-1, 0, () => { P(ox, oy, 2, TILE, '#e4c590'); P(ox + 2, oy, 1, TILE, PAL.cyan); });
+      edge(1, 0, () => { P(ox + 14, oy, 2, TILE, '#c9a26b'); P(ox + 13, oy, 1, TILE, PAL.cyan); });
+      // lily pads
+      if (deep && rng() < 0.12) {
+        const x = ox + 3 + ((rng() * 8) | 0), y = oy + 3 + ((rng() * 8) | 0);
+        P(x, y, 4, 3, PAL.leafM); P(x + 1, y, 1, 1, PAL.leafL); P(x + 2, y + 1, 1, 1, PAL.water);
+        if (rng() < 0.4) P(x + 1, y + 1, 1, 1, '#ffb0d0');
       }
     }
   }

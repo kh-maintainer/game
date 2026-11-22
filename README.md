@@ -4,7 +4,7 @@ An incremental factory-building game with 2D pixel art. You can play solo or in 
 
 Mine ore, run it along conveyors, smelt and assemble it into more valuable parts, and sell everything at the Market. Reinvest in upgrades, research and land. When growth slows, sell the company for **Patents** (prestige) and start a new map with permanent bonuses. The final goal is to feed 150 robots into a Launch Pad and launch the **Orbital Foundry**.
 
-There are no assets or build step. All pixel art, sound effects and music are generated in code.
+There are no assets or build step. All pixel art (one cohesive Sweetie 16-based palette), sound effects and music are generated in code. The world feels alive: swaying forests, shimmering ponds, drifting cloud shadows, birds, butterflies, and a day/night cycle where furnaces and lamps light up the dark, plus fireflies at night.
 
 ## Play
 
@@ -62,7 +62,8 @@ How it works:
 **Quality of life:**
 - Autosaves every 15s, with offline earnings (50% base, up to 8h).
 - Save export/import, plus volume, mute and grid settings.
-- A minimap, smoke and coin particles, and screen shake on liftoff.
+- A minimap, smoke and coin particles, buildings that pop in with a dust puff, and screen shake on liftoff.
+- Settings toggles for the grid and the day/night cycle.
 
 ## Code layout
 
