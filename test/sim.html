@@ -1,69 +1,140 @@
 <!DOCTYPE html><html><body><pre id="out"></pre>
 <script src="../js/data.js"></script><script src="../js/game.js"></script>
 <script>
-// Headless simulation test: builds small factories and checks money flows.
+// Headless simulation tests. Open in a browser (or headless Chrome --dump-dom).
 const log = [];
-const check = (name, cond, extra='') => log.push((cond ? 'PASS ' : 'FAIL ') + name + ' ' + extra);
+const check = (name, cond, extra = '') => log.push((cond ? 'PASS ' : 'FAIL ') + name + ' ' + extra);
+const run = (g, secs) => { for (let i = 0; i < secs * 20; i++) g.update(TICK); };
+const fresh = (seed) => { const g = new Game(seed); g.money = 1e12; g.land = LAND_COSTS.length; return g; };
 try {
-  const g = new Game(12345);
-  const c = g.center();
-  g.money = 1e6;
-  // miner -> 3 belts -> market, all heading east into market at (c.x, c.y)
-  const y = c.y;
+  // 1. raw ore line
+  let g = fresh(12345);
+  let c = g.center(), y = c.y;
   g.ore[y * g.w + c.x - 5] = 'iron_ore';
   g.place('miner', c.x - 5, y, 0);
   for (let x = c.x - 4; x < c.x; x++) g.place('belt', x, y, 0);
   const m0 = g.money;
-  for (let i = 0; i < 20 * 30; i++) g.update(TICK);
-  const earned = g.money - m0;
-  check('raw ore line earns', earned > 10, 'earned=' + earned.toFixed(1) + ' sold=' + JSON.stringify(g.stats.sold));
+  run(g, 30);
+  check('raw ore line earns', g.money - m0 > 10, 'earned=' + (g.money - m0).toFixed(1));
 
-  // insert smelter
-  g.remove(c.x - 2, y);
-  g.place('smelter', c.x - 2, y, 0);
+  // 2. smelter
+  g.remove(c.x - 2, y); g.place('smelter', c.x - 2, y, 0);
   g.stats.sold = {};
-  for (let i = 0; i < 20 * 30; i++) g.update(TICK);
-  check('smelter line sells plates', (g.stats.sold.iron_plate || 0) > 5, JSON.stringify(g.stats.sold));
+  run(g, 30);
+  check('smelter sells plates', (g.stats.sold.iron_plate || 0) > 5, JSON.stringify(g.stats.sold));
 
-  // throughput: 6 miners feeding one long belt
-  const g2 = new Game(7); g2.money = 1e9;
-  const c2 = g2.center();
-  for (let x = c2.x - 20; x < c2.x; x++) g2.place('belt', x, c2.y, 0);
-  for (let x = c2.x - 20; x < c2.x - 14; x++) { g2.ore[(c2.y-1)*g2.w+x]='iron_ore'; g2.place('miner', x, c2.y - 1, 1); }
-  for (let i = 0; i < 20 * 60; i++) g2.update(TICK);
-  const rate = g2.stats.sold.iron_ore / 60;
-  check('belt throughput reasonable', rate > 1.2, 'items/s=' + rate.toFixed(2) + ' beltSpeed=' + g2.beltSpeed());
+  // 3. belt throughput
+  let g2 = fresh(7); c = g2.center();
+  for (let x = c.x - 20; x < c.x; x++) g2.place('belt', x, c.y, 0);
+  for (let x = c.x - 20; x < c.x - 14; x++) { g2.ore[(c.y - 1) * g2.w + x] = 'iron_ore'; g2.place('miner', x, c.y - 1, 1); }
+  run(g2, 20); // warm-up: first item needs ~12s to cross 20 tiles
+  const before = g2.stats.sold.iron_ore || 0;
+  run(g2, 40);
+  const rate = (g2.stats.sold.iron_ore - before) / 40;
+  check('belt throughput', rate > 1.5, 'items/s=' + rate.toFixed(2) + ' (belt speed ' + g2.beltSpeed() + ')');
 
-  // assembler gear chain
-  const g3 = new Game(9); g3.money = 1e9; g3.research.assembly = true;
-  const c3 = g3.center();
-  for (let x = c3.x - 6; x < c3.x - 4; x++) { g3.ore[(c3.y)*g3.w+x]='iron_ore'; }
-  g3.place('miner', c3.x - 6, c3.y, 0);
-  g3.place('miner', c3.x - 5, c3.y, 0); // miner pushing into miner - should block
-  g3.place('belt', c3.x - 4, c3.y, 0);
-  g3.place('smelter', c3.x - 3, c3.y, 0);
-  g3.place('belt', c3.x - 2, c3.y, 0);
-  g3.place('assembler', c3.x - 1, c3.y, 0);
-  for (let i = 0; i < 20 * 60; i++) g3.update(TICK);
+  // 4. assembler gears
+  let g3 = fresh(9); g3.research.assembly = true; c = g3.center();
+  g3.ore[c.y * g3.w + c.x - 5] = 'iron_ore';
+  g3.place('miner', c.x - 5, c.y, 0); g3.place('belt', c.x - 4, c.y, 0);
+  g3.place('smelter', c.x - 3, c.y, 0); g3.place('belt', c.x - 2, c.y, 0);
+  g3.place('assembler', c.x - 1, c.y, 0);
+  run(g3, 60);
   check('assembler makes gears', (g3.stats.sold.gear || 0) > 3, JSON.stringify(g3.stats.sold));
 
-  // splitter
-  const g4 = new Game(3); g4.money = 1e9; g4.research.splitter = true;
-  const c4 = g4.center();
-  g4.ore[c4.y*g4.w + c4.x-3] = 'iron_ore';
-  g4.place('miner', c4.x - 3, c4.y - 1 + 1, 0);
-  g4.place('splitter', c4.x - 2, c4.y, 0);
-  g4.place('belt', c4.x - 2, c4.y - 1, 3); g4.place('belt', c4.x - 2, c4.y - 2, 0); g4.place('belt', c4.x - 1, c4.y - 2, 0);
-  g4.place('seller', c4.x, c4.y - 2, 0);
-  g4.place('belt', c4.x - 1, c4.y, 0);
-  for (let i = 0; i < 20 * 30; i++) g4.update(TICK);
-  check('splitter distributes', g4.stats.sold.iron_ore > 10, JSON.stringify(g4.stats.sold));
+  // 5. tunnel: miner -> tunnel in ... tunnel out -> belt -> market
+  let g4 = fresh(3); g4.research.logistics = true; g4.research.splitter = true; c = g4.center();
+  g4.ore[c.y * g4.w + c.x - 7] = 'copper_ore';
+  g4.place('miner', c.x - 7, c.y, 0);
+  g4.place('tunnel', c.x - 6, c.y, 0);
+  g4.place('chest', c.x - 4, c.y, 0); // obstacle the tunnel passes under
+  g4.place('tunnel', c.x - 2, c.y, 0);
+  g4.place('belt', c.x - 1, c.y, 0);
+  const tin = g4.at(c.x - 6, c.y), tout = g4.at(c.x - 2, c.y);
+  check('tunnel auto-pairs', tin.mode === 'in' && tout.mode === 'out' && g4.tunnelPartner(tin) === tout, tin.mode + '/' + tout.mode);
+  run(g4, 30);
+  check('tunnel carries items', (g4.stats.sold.copper_ore || 0) > 8, JSON.stringify(g4.stats.sold));
 
-  // save/load roundtrip
-  const s = g3.serialize();
-  const g5 = Game.deserialize(JSON.parse(JSON.stringify(s)));
-  check('save roundtrip', g5.buildings.length === g3.buildings.length && g5.money === g3.money, g5.buildings.length + ' vs ' + g3.buildings.length);
-  check('income rate computed', g3.incomeRate > 0, 'rate=' + g3.incomeRate.toFixed(2));
+  // 6. chest buffers then releases; sorter routes
+  let g5 = fresh(5); g5.research.logistics = true; c = g5.center();
+  g5.ore[c.y * g5.w + c.x - 4] = 'iron_ore';
+  g5.place('miner', c.x - 4, c.y, 0);
+  g5.place('chest', c.x - 3, c.y, 0);
+  g5.place('sorter', c.x - 2, c.y, 0);
+  g5.at(c.x - 2, c.y).filter = 'iron_ore';
+  g5.place('belt', c.x - 1, c.y, 0);
+  run(g5, 20);
+  check('chest + sorter pass-through', (g5.stats.sold.iron_ore || 0) > 6, JSON.stringify(g5.stats.sold));
+  // non-matching filter: item must go sideways (nothing to the side -> blocks)
+  g5.at(c.x - 2, c.y).filter = 'gear';
+  g5.stats.sold = {};
+  run(g5, 10);
+  check('sorter blocks non-matching straight', (g5.stats.sold.iron_ore || 0) <= 1, JSON.stringify(g5.stats.sold));
+  check('chest fills while blocked', g5.at(c.x - 3, c.y).store.length > 3, 'store=' + g5.at(c.x - 3, c.y).store.length);
+
+  // 7. land restriction
+  let g6 = new Game(1); c = g6.center();
+  check('land blocks far placement', g6.placeError('belt', c.x + 20, c.y) && g6.placeError('belt', c.x + 20, c.y).startsWith('Land'), g6.placeError('belt', c.x + 20, c.y));
+  g6.money = 1e6;
+  g6.apply({ type: 'land' });
+  check('buying land expands', g6.land === 1 && !g6.placeError('belt', c.x + 15, c.y), 'land=' + g6.land);
+
+  // 8. prestige
+  let g7 = fresh(11); g7.runEarned = 1e6; g7.meta.achievements.x = 1;
+  const res = g7.apply({ type: 'prestige', seed: 42 });
+  check('prestige grants patents', res.ok && g7.meta.patents === Math.floor(Math.sqrt(1e6 / PATENT_DIVISOR)) && g7.seed === 42 && g7.buildings.length === 1, 'patents=' + g7.meta.patents);
+  check('prestige keeps meta', g7.meta.achievements.x === 1 && g7.money === START_MONEY);
+  g7.apply({ type: 'patent', id: 'brand_value' });
+  check('patent shop', g7.patentLvl('brand_value') === 1 && g7.sellMult() > 1.3, 'mult=' + g7.sellMult().toFixed(2));
+
+  // 9. launch
+  let g8 = fresh(13); g8.research.spaceflight = true; c = g8.center();
+  g8.place('launchpad', c.x + 3, c.y, 0);
+  const pad = g8.at(c.x + 3, c.y);
+  for (let i = 0; i < LAUNCH_REQ; i++) LOGIC.launchpad.insert(g8, pad, 'robot');
+  run(g8, 5);
+  check('launch completes', g8.meta.launches === 1 && g8.meta.patents === 5 && pad.count === 0, 'launches=' + g8.meta.launches);
+
+  // 10. co-op: host & guest apply the same actions in the same order + snapshot sync
+  const host = fresh(99), guest = fresh(99); guest.isGuest = true;
+  c = host.center();
+  const acts = [
+    { type: 'place', b: 'belt', x: c.x - 1, y: c.y, dir: 0 },
+    { type: 'place', b: 'belt', x: c.x - 2, y: c.y, dir: 0 },
+    { type: 'setdir', x: c.x - 2, y: c.y, dir: 0 },
+    { type: 'upgrade', id: 'belt_speed' },
+    { type: 'research', id: 'splitter' },
+    { type: 'place', b: 'splitter', x: c.x - 3, y: c.y, dir: 0 },
+    { type: 'rotate', x: c.x - 3, y: c.y, delta: 1 },
+    { type: 'remove', x: c.x - 3, y: c.y },
+  ];
+  for (const a of acts) { const r = host.apply(a); if (r.ok) guest.apply(a); }
+  const sameBuild = JSON.stringify(host.serialize().buildings) === JSON.stringify(guest.serialize().buildings);
+  check('co-op action replay matches', sameBuild && host.money === guest.money, host.buildings.length + ' vs ' + guest.buildings.length);
+  run(host, 5);
+  const snap = JSON.parse(JSON.stringify(host.serialize()));
+  guest.restore(snap);
+  check('snapshot restore exact', JSON.stringify(guest.serialize().buildings) === JSON.stringify(host.serialize().buildings) && guest.money === host.money);
+  const other = new Game(1234); other.restore(snap);
+  check('snapshot restore across seeds', other.seed === 99 && other.oreAt(0, 0) === host.oreAt(0, 0) && other.buildings.length === host.buildings.length);
+
+  // 11. save roundtrip incl. items in transit
+  const s = g4.serialize();
+  const g9 = Game.fromData(JSON.parse(JSON.stringify(s)));
+  check('save roundtrip', g9.buildings.length === g4.buildings.length && g9.money === g4.money && JSON.stringify(g9.serialize().buildings) === JSON.stringify(s.buildings));
+
+  // 12. goals and achievements fire
+  let ga = fresh(21); c = ga.center();
+  ga.ore[c.y * ga.w + c.x - 3] = 'iron_ore';
+  ga.place('miner', c.x - 3, c.y, 0); ga.place('belt', c.x - 2, c.y, 0); ga.place('belt', c.x - 1, c.y, 0);
+  run(ga, 30);
+  check('goals progress', ga.goalIdx >= 2, 'goalIdx=' + ga.goalIdx);
+  check('achievements unlock', !!ga.meta.achievements.first_sale, Object.keys(ga.meta.achievements).join(','));
+
+  // 13. v1 save migration
+  const v1 = { seed: 5, money: 500, totalEarned: 1000, upgrades: { belt_speed: 2 }, research: {}, stats: { sold: { iron_ore: 10 } }, buildings: [{ t: 'belt', x: 40, y: 40, d: 0, p: 2 }] };
+  const gm = Game.fromData(v1);
+  check('v1 migration', gm.money === 500 && gm.lvl('belt_speed') === 2 && gm.buildings.length === 1 && gm.meta.life.itemsSold === 10);
 } catch (e) { log.push('ERROR ' + e.stack); }
 document.getElementById('out').textContent = log.join('\n');
 </script></body></html>

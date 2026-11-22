@@ -115,6 +115,36 @@ const SHAPES = {
     '.dddddd.',
     '..d..d..',
   ],
+  ingot: [
+    '........',
+    '........',
+    '..dddddd',
+    '.daaaabd',
+    'dabbbbcd',
+    'dddddddd',
+    '........',
+    '........',
+  ],
+  processor: [
+    '..c.c...',
+    '.dddddd.',
+    'cdaeeadc',
+    '.deffed.',
+    'cdeffedc',
+    '.dddddd.',
+    '..c.c...',
+    '........',
+  ],
+  robot: [
+    '...cc...',
+    '..dddd..',
+    '.daaaad.',
+    '.dfaafd.',
+    '.daaaad.',
+    '.dbbbbd.',
+    '..d..d..',
+    '..d..d..',
+  ],
 };
 
 const ITEM_ART = {
@@ -130,6 +160,10 @@ const ITEM_ART = {
   circuit:      ['circuit', { a: '#1e1e24', e: '#3a3a44', b: '#2f9e4f', d: '#145a2a', c: '#f2c94c' }],
   steel:        ['steel',   { a: '#e6edf4', b: '#9fb0c0', c: '#6a7b8c', d: '#1b232d' }],
   motor:        ['motor',   { a: '#c7d3de', b: '#7d8ea0', c: '#4f5d6b', d: '#1b2129', e: '#d9783f', f: '#ffb070' }],
+  gold_ore:     ['ore',     { a: '#fff0a0', b: '#e8b830', c: '#a87810', d: '#3a2a08' }],
+  gold_bar:     ['ingot',   { a: '#fff3b0', b: '#f2c94c', c: '#b08a20', d: '#3a2a08' }],
+  processor:    ['processor', { a: '#2a2a33', c: '#f2c94c', d: '#101014', e: '#3f6f8f', f: '#7fe0ff' }],
+  robot:        ['robot',   { a: '#d0d8e0', b: '#8a96a3', c: '#ff5a4a', d: '#1b2129', f: '#7fe0ff' }],
 };
 
 // ------------------------------- buildings ---------------------------------
@@ -298,15 +332,148 @@ function splitterFrame(f) {
   });
 }
 
+// Curved belt: items arrive from the SOUTH and leave EAST (mirror for north).
+function beltCurveFrame(f) {
+  return sprite(16, 16, (P) => {
+    P(0, 0, 16, 16, '#24242b');
+    P(2, 2, 14, 14, '#2d2d35');
+    const c = '#45454f';
+    // east-moving chevrons on the output leg (x >= 8)
+    for (let k = 0; k < 2; k++) {
+      const cx = k * 8 + f;
+      for (let i = 0; i < 4; i++) for (const t of [0, 1]) {
+        const x = (cx + i + t) % 16;
+        if (x < 8) continue;
+        P(x, 4 + i, 1, 1, c);
+        P(x, 11 - i, 1, 1, c);
+      }
+    }
+    // north-moving chevrons on the input leg (y >= 8)
+    for (let k = 0; k < 2; k++) {
+      const cy = 15 - ((k * 8 + f) % 16);
+      for (let i = 0; i < 4; i++) for (const t of [0, 1]) {
+        const y = (cy - i - t + 32) % 16;
+        if (y < 8) continue;
+        P(4 + i, y, 1, 1, c);
+        P(11 - i, y, 1, 1, c);
+      }
+    }
+    // outer rails (top + left) and inner corner post
+    P(0, 0, 16, 2, '#5f5f6c');
+    P(0, 1, 16, 1, '#474752');
+    P(0, 0, 2, 16, '#5f5f6c');
+    P(1, 2, 1, 14, '#474752');
+    P(14, 14, 2, 2, '#5f5f6c');
+    P(3, 0, 1, 1, '#8a8a98'); P(11, 0, 1, 1, '#8a8a98'); P(0, 11, 1, 1, '#8a8a98');
+  });
+}
+
+function chestFrame(f) {
+  return sprite(16, 16, (P) => {
+    const out = '#2a1a0c';
+    frameBox(P, '#8a5a2b', '#b07a40', '#5e3c1a', out);
+    for (const y of [5, 9]) P(2, y, 11, 1, '#5e3c1a');
+    P(2, 3, 11, 1, '#6e7480'); P(2, 12, 11, 1, '#6e7480');
+    P(3, 2, 1, 12, '#6e7480'); P(11, 2, 1, 12, '#6e7480');
+    P(6, 6, 3, 3, f ? '#ffe07a' : '#f2c94c');
+    P(7, 7, 1, 1, out);
+    chute(P, out);
+  });
+}
+
+function tunnelFrame(mode, f) {
+  return sprite(16, 16, (P) => {
+    // belt half
+    const bx = mode === 'in' ? 0 : 8;
+    P(bx, 0, 8, 16, '#24242b');
+    P(bx, 2, 8, 12, '#2d2d35');
+    for (let i = 0; i < 4; i++) {
+      const x = bx + ((f + i) % 8);
+      P(x, 4 + i, 1, 1, '#45454f'); P(x, 11 - i, 1, 1, '#45454f');
+    }
+    P(bx, 0, 8, 2, '#5f5f6c'); P(bx, 14, 8, 2, '#5f5f6c');
+    // portal housing
+    const hx = mode === 'in' ? 7 : 0;
+    P(hx, 0, 9, 16, '#3c3a36');
+    P(hx + 1, 1, 7, 14, '#57534c');
+    P(hx + 1, 1, 7, 1, '#77726a');
+    const mx = mode === 'in' ? hx + 1 : hx + 2;
+    P(mx, 3, 6, 10, '#0b0b0e');
+    P(mx, 3, 6, 1, '#1d1d24');
+    // hazard trim
+    for (let y = 1; y < 15; y += 2) P(mode === 'in' ? hx : hx + 8, y, 1, 1, '#f2c94c');
+    P(mode === 'in' ? 10 : 3, 7, 2, 2, mode === 'in' ? '#7be38f' : '#7fe0ff');
+  });
+}
+
+function sorterFrame(f) {
+  return sprite(16, 16, (P) => {
+    P(0, 0, 16, 16, '#24242b');
+    P(1, 1, 14, 14, '#4a3a5c');
+    P(2, 2, 12, 12, '#2d2d35');
+    P(0, 6, 3, 4, '#5f5f6c');
+    const a = f ? '#e0b0ff' : '#b07ae0';
+    // east arrow
+    P(11, 6, 1, 4, a); P(12, 7, 1, 2, a);
+    // side arrows
+    P(6, 2, 4, 1, a); P(7, 1, 2, 1, a);
+    P(6, 13, 4, 1, a); P(7, 14, 2, 1, a);
+    // filter frame
+    P(4, 4, 8, 8, '#16161b');
+    P(5, 5, 6, 6, '#3a3a44');
+  });
+}
+
+function launchpadFrame(f) {
+  return sprite(16, 16, (P) => {
+    P(0, 0, 16, 16, '#1b1e24');
+    P(1, 1, 14, 14, '#4a505c');
+    P(2, 2, 12, 12, '#5d6573');
+    for (let i = 0; i < 16; i += 2) { P(i, 0, 1, 1, '#f2c94c'); P(i + 1, 15, 1, 1, '#f2c94c'); P(0, i + 1, 1, 1, '#f2c94c'); P(15, i, 1, 1, '#f2c94c'); }
+    P(4, 4, 8, 8, '#2a2f38');
+    P(5, 5, 6, 6, f ? '#ff8a2a' : '#3a404c');
+    P(1, 1, 2, 2, f ? '#ff5a4a' : '#7a2a2a'); P(13, 13, 2, 2, f ? '#ff5a4a' : '#7a2a2a');
+  });
+}
+
+function rocketSprite() {
+  return sprite(12, 28, (P) => {
+    const o = '#1b2129';
+    // nose
+    P(5, 0, 2, 1, o); P(4, 1, 4, 1, o); P(3, 2, 6, 2, o);
+    P(5, 1, 2, 1, '#ff5a4a'); P(4, 2, 4, 2, '#ff5a4a');
+    // body
+    P(3, 4, 6, 18, o);
+    P(4, 4, 4, 18, '#e6edf4');
+    P(7, 4, 1, 18, '#9fb0c0');
+    P(4, 8, 4, 1, '#3d5775');
+    // window
+    P(5, 10, 2, 3, '#7fe0ff'); P(5, 10, 1, 1, '#e8fbff');
+    P(4, 16, 4, 1, '#ff5a4a');
+    // fins
+    P(1, 18, 2, 6, o); P(2, 19, 1, 4, '#ff5a4a');
+    P(9, 18, 2, 6, o); P(9, 19, 1, 4, '#ff5a4a');
+    // nozzle
+    P(4, 22, 4, 2, '#4a505c'); P(3, 24, 6, 1, o);
+  });
+}
+
 const SPR = {
   items: {},
   belt: [],
+  beltCurve: [],
   miner: [],
   smelter: [],
   assembler: [],
   foundry: [],
   seller: [],
   splitter: [],
+  sorter: [],
+  chest: [],
+  tunnel: [],
+  tunnelOut: [],
+  launchpad: [],
+  rocket: null,
   icons: {},
 };
 
@@ -315,12 +482,19 @@ function buildSprites() {
     SPR.items[id] = fromStrings(SHAPES[shape], pal);
   }
   for (let f = 0; f < 8; f++) SPR.belt.push(beltFrame(f));
+  for (let f = 0; f < 8; f++) SPR.beltCurve.push(beltCurveFrame(f));
+  for (let f = 0; f < 8; f++) SPR.tunnel.push(tunnelFrame('in', f));
+  for (let f = 0; f < 8; f++) SPR.tunnelOut.push(tunnelFrame('out', f));
   for (let f = 0; f < 2; f++) SPR.miner.push(minerFrame(f));
   for (let f = 0; f < 3; f++) SPR.smelter.push(smelterFrame(f));
   for (let f = 0; f < 2; f++) SPR.assembler.push(assemblerFrame(f));
   for (let f = 0; f < 3; f++) SPR.foundry.push(foundryFrame(f));
   for (let f = 0; f < 2; f++) SPR.seller.push(sellerFrame(f));
   for (let f = 0; f < 2; f++) SPR.splitter.push(splitterFrame(f));
+  for (let f = 0; f < 2; f++) SPR.sorter.push(sorterFrame(f));
+  for (let f = 0; f < 2; f++) SPR.chest.push(chestFrame(f));
+  for (let f = 0; f < 2; f++) SPR.launchpad.push(launchpadFrame(f));
+  SPR.rocket = rocketSprite();
   for (const id of BUILD_ORDER) SPR.icons[id] = SPR[id][id === 'smelter' || id === 'foundry' ? 1 : 0];
 }
 
@@ -341,6 +515,7 @@ const ORE_COLORS = {
   copper_ore: ['#f2a46a', '#c0642f', '#6e3417'],
   stone:      ['#c9bfae', '#958a7b', '#5a5248'],
   coal:       ['#5a5a68', '#33333d', '#141418'],
+  gold_ore:   ['#fff0a0', '#e8b830', '#8a6210'],
 };
 
 function renderTerrain(game) {
