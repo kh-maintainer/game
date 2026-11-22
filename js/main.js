@@ -117,27 +117,42 @@ function buildDemo(g) {
   g.land = 3;
   const c = g.center();
   const y = c.y;
-  for (let x = c.x - 8; x < c.x; x++) g.place('belt', x, y, 0);
-  g.remove(c.x - 3, y); g.place('smelter', c.x - 3, y, 0);
-  g.remove(c.x - 2, y); g.place('assembler', c.x - 2, y, 0);
-  for (let x = c.x - 8; x < c.x - 4; x++) { g.ore[(y - 1) * g.w + x] = 'iron_ore'; g.place('miner', x, y - 1, 1); }
-  for (let x = c.x - 8; x < c.x - 4; x++) { g.ore[(y + 1) * g.w + x] = 'copper_ore'; g.place('miner', x, y + 1, 3); }
-  // curved belt feeding the market from the north
+  // clear water around the showcase so every line can be built
+  for (let dy = -8; dy <= 8; dy++) for (let dx = -12; dx <= 10; dx++) g.water[(y + dy) * g.w + c.x + dx] = 0;
+  const ore = (x, yy, type) => { g.ore[yy * g.w + x] = type; };
+  // iron line: 3 miners -> belt -> smelter -> assembler (gears) -> market
+  for (let x = c.x - 9; x < c.x - 3; x++) g.place('belt', x, y, 0);
+  g.place('smelter', c.x - 3, y, 0);
+  g.place('assembler', c.x - 2, y, 0);
+  g.place('belt', c.x - 1, y, 0);
+  for (let x = c.x - 9; x < c.x - 6; x++) { ore(x, y - 1, 'iron_ore'); g.place('miner', x, y - 1, 1); }
+  for (let x = c.x - 9; x < c.x - 6; x++) ore(x, y + 1, 'iron_ore');
+  // copper line from the north: curve -> chest -> market
+  ore(c.x - 2, y - 4, 'copper_ore'); ore(c.x - 1, y - 5, 'copper_ore');
+  g.place('miner', c.x - 2, y - 4, 0);
+  g.place('miner', c.x - 1, y - 5, 1);
   g.place('belt', c.x - 1, y - 4, 0);
   g.place('belt', c.x, y - 4, 1);
   g.place('belt', c.x, y - 3, 1);
   g.place('chest', c.x, y - 2, 1);
   g.place('belt', c.x, y - 1, 1);
-  // tunnel pair
+  // stone line from the east travelling underground into the market
+  ore(c.x + 6, y, 'stone');
+  g.place('miner', c.x + 6, y, 2);
+  g.place('belt', c.x + 5, y, 2);
   g.place('tunnel', c.x + 4, y, 2);
   g.place('tunnel', c.x + 1, y, 2);
-  g.place('belt', c.x + 5, y, 2);
-  g.place('sorter', c.x + 3, y + 3, 0);
-  g.buildings[g.buildings.length - 1].filter = 'gear';
-  g.place('splitter', c.x + 2, y + 3, 0);
+  // copper from the south through a smelter
+  for (let x = c.x - 3; x <= c.x - 1; x++) ore(x, y + 4, 'copper_ore');
+  for (let x = c.x - 3; x <= c.x - 1; x++) g.place('miner', x, y + 4, 3);
+  for (let x = c.x - 3; x <= c.x - 1; x++) g.place('belt', x, y + 3, 0);
+  g.place('belt', c.x, y + 3, 3);
+  g.place('smelter', c.x, y + 2, 3);
+  g.place('belt', c.x, y + 1, 3);
+  // set pieces
   g.place('foundry', c.x + 3, y - 3, 2);
-  g.place('launchpad', c.x + 6, y - 3, 0);
-  g.at(c.x + 6, y - 3).count = 90;
+  g.place('launchpad', c.x + 6, y - 4, 0);
+  g.at(c.x + 6, y - 4).count = 90;
   g.money = 1e9;
   app.renderer.terrain = renderTerrain(g);
   app.renderer.cam.zoom = 4;

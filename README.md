@@ -6,6 +6,18 @@ Mine ore, run it along conveyors, smelt and assemble it into more valuable parts
 
 There are no assets or build step. All pixel art (one cohesive Sweetie 16-based palette), sound effects and music are generated in code. The world feels alive: swaying forests, shimmering ponds, drifting cloud shadows, birds, butterflies, and a day/night cycle where furnaces and lamps light up the dark, plus fireflies at night.
 
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Title screen](docs/screenshots/1-title.png) | ![Factory by day](docs/screenshots/2-day.png) |
+| Title screen over the live world | A small factory by day |
+| ![Factory at night](docs/screenshots/3-night.png) | ![Co-op](docs/screenshots/4-coop.png) |
+| Night: furnaces and lamps light the dark | Co-op: partner cursor, chat, ping, research |
+| ![Golden hour](docs/screenshots/5-dusk.png) | |
+| Golden hour at dusk | |
+
 ## Play
 
 Open `index.html` in a browser, or serve the folder:
