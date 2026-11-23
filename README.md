@@ -67,17 +67,29 @@ How it works:
 
 | Input | Action |
 | --- | --- |
-| `1`–`9`, `0`, `P` | Select a building |
+| `WASD` / arrows | Walk (`Shift` runs). The camera follows you. Stand on a conveyor to ride it |
+| `1`–`9`, `0`, `V`, `B`, `Z`, `X`, `C`, `P` | Select a building |
+| Left click / drag | Build within ~3 tiles of your character (dotted ring). Dragging conveyors bends the line to follow you |
+| Right click / drag | Remove (full refund) |
 | `R` / `Shift+R` | Rotate the ghost or the building under the cursor |
 | `Q` | Pipette: copy the building under the cursor |
-| `Esc` | Cancel tool / close inspector |
-| Left click / drag | Build (dragging conveyors bends the line to follow the cursor) |
-| Right click / drag | Remove (full refund) |
-| Click a building | Inspect it, pick a recipe, set a sorter filter, or swap a tunnel's entry/exit |
-| `WASD` / arrows / drag ground | Pan (`Shift` = faster) |
-| Wheel / `+` `-` / minimap | Zoom / jump |
+| Click a building | Inspect it, pick a recipe, set a sorter filter |
+| `E` | Advance dialogue |
+| Mouse wheel / `+` `-` | Zoom |
 | `Enter` / `G` | Chat / ping (co-op) |
 | `M` / `H` | Mute / help |
+
+## Power
+
+Basic Miners and Smelters need no power. Assemblers, Foundries, Deep Drills, Arc Furnaces and Fabricators draw MW from one shared grid:
+- **Generators** burn coal (any side) for 20 MW each.
+- **Solar Panels** make 8 MW with no fuel.
+
+If demand is higher than supply, every powered machine slows down by the same ratio. The top bar shows `⚡ supply / demand`, and a lightning icon blinks over starved machines.
+
+## Music
+
+Five procedural chiptune tracks: Morning Shift, Gearworks, Gold Rush, Orbit and Night Furnace. They rotate automatically, and the calm Night Furnace plays after dark. You can pin one in Settings.
 
 ## Content
 

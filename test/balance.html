@@ -17,7 +17,7 @@ const LAND_DENSITY = 0.3; // fraction of owned tiles the factory can realistical
 function run() {
   const S = {
     t: 0, money: START_MONEY, runEarned: 0, upgrades: {}, research: {}, land: 0,
-    counts: { belt: 0, miner: 0, smelter: 0, seller: 1, assembler: 0, foundry: 0, splitter: 0, chest: 0, tunnel: 0, sorter: 0, launchpad: 0 },
+    counts: Object.fromEntries(Object.keys(BUILDINGS).map((k) => [k, k === 'seller' ? 1 : 0])),
     lines: {}, // product -> output items/s
     goals: 0, robotsLaunched: 0,
   };
@@ -75,6 +75,9 @@ function run() {
       if (!productUnlocked(p)) continue;
       const rate = ORES[p] ? minerRate() : (() => { const rid = Object.keys(RECIPES).find((k) => RECIPES[k].out[p]); const r = RECIPES[rid]; return r.out[p] / r.time * craft(); })();
       const acc = need(p, rate, {});
+      // power: generators for the machines' MW, plus coal miners to fuel them
+      const mw = Object.entries(acc).reduce((a, [b, n]) => a + (POWER_USE[b] || 0) * n, 0);
+      if (mw > 0) { acc.generator = mw / GEN_OUTPUT; acc.miner = (acc.miner || 0) + acc.generator / COAL_SECONDS / minerRate(); }
       let c = 0, nb = 0;
       for (const b in acc) { c += cost(b, acc[b]); nb += acc[b]; }
       c += cost('belt', nb * BELTS_PER_BUILDING);

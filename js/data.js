@@ -13,6 +13,8 @@ const SAVE_KEY = 'pixelfoundry_save_v1';
 const SETTINGS_KEY = 'pixelfoundry_settings';
 const OFFLINE_CAP_SECONDS = 8 * 3600;
 const TUNNEL_RANGE = 5;
+const BUILD_RANGE = 3.6;   // tiles from your character you can build or remove
+const WALK_SPEED = 5.5;    // tiles per second (Shift sprints at 1.7x)
 const CHEST_CAP = 64;
 const LAUNCH_REQ = 150;
 
@@ -65,7 +67,7 @@ const RECIPES = {
 
 const BUILDINGS = {
   belt:      { name: 'Conveyor',   cost: 2,    growth: 1.0,  dir: true,  key: '1', desc: 'Moves items forward. Click and drag to lay a line — it bends to follow you.' },
-  miner:     { name: 'Miner',      cost: 40,   growth: 1.12, dir: true,  key: '2', desc: 'Place on an ore patch. Pushes ore out of its front.' },
+  miner:     { name: 'Miner',      cost: 40,   growth: 1.12, dir: true,  key: '2', family: 'miner', desc: 'Place on ore. Pushes ore out of its front — and passes along items fed in from behind, so miners can chain.' },
   smelter:   { name: 'Smelter',    cost: 100,  growth: 1.15, dir: true,  key: '3', desc: 'Ore into plates or bars, stone into bricks. Picks its recipe automatically.' },
   seller:    { name: 'Market',     cost: 150,  growth: 1.35, dir: false, key: '4', desc: 'Sells anything delivered to it, from any side.' },
   splitter:  { name: 'Splitter',   cost: 30,   growth: 1.04, dir: true,  key: '5', desc: 'Takes items from behind and deals them front / left / right in turn.', unlock: 'splitter' },
@@ -75,11 +77,26 @@ const BUILDINGS = {
   tunnel:    { name: 'Tunnel',     cost: 40,   growth: 1.05, dir: true,  key: '9', desc: `Place an entrance, then an exit up to ${TUNNEL_RANGE} tiles ahead. Items travel underground.`, unlock: 'logistics' },
   sorter:    { name: 'Sorter',     cost: 120,  growth: 1.06, dir: true,  key: '0', desc: 'Filtered item goes straight on, everything else goes left / right. Click to set the filter.', unlock: 'logistics' },
   launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 2.0,  dir: false, key: 'P', desc: `Feed it ${LAUNCH_REQ} Robots to launch the Orbital Foundry.`, unlock: 'spaceflight' },
+  generator: { name: 'Generator',  cost: 300,  growth: 1.15, dir: false, key: 'V', desc: 'Burns coal to make 20 MW of power for Assemblers and other advanced machines. Feed it coal from any side.', unlock: 'assembly' },
+  solar:     { name: 'Solar Panel', cost: 20000, growth: 1.12, dir: false, key: 'B', desc: 'Makes 8 MW of clean power, no fuel needed.', unlock: 'solar' },
+  deepdrill: { name: 'Deep Drill', cost: 450,  growth: 1.14, dir: true,  key: 'Z', family: 'miner', speed: 3, desc: 'A Miner that digs 3x faster. Chains like a Miner.', unlock: 'deepdrills' },
+  arcfurnace:{ name: 'Arc Furnace', cost: 3500, growth: 1.16, dir: true, key: 'X', family: 'smelter', speed: 3, desc: 'An electric Smelter: 3x faster, same recipes.', unlock: 'arcfurnace' },
+  fabricator:{ name: 'Fabricator', cost: 25000, growth: 1.18, dir: true, key: 'C', family: 'assembler', speed: 3, desc: 'A 3x faster Assembler. Click it to choose a recipe.', unlock: 'fabrication' },
 };
-const BUILD_ORDER = ['belt', 'miner', 'smelter', 'seller', 'splitter', 'assembler', 'foundry', 'chest', 'tunnel', 'sorter', 'launchpad'];
-const CRAFTERS = { smelter: 'iron_plate', assembler: 'gear', foundry: 'steel' };
+const BUILD_ORDER = ['belt', 'miner', 'smelter', 'seller', 'splitter', 'assembler', 'generator', 'foundry', 'chest', 'tunnel', 'sorter', 'solar', 'deepdrill', 'arcfurnace', 'fabricator', 'launchpad'];
+
+// Power: advanced machines draw MW from a shared grid. If demand outstrips supply,
+// every powered machine slows down by the same ratio.
+const POWER_USE = { assembler: 4, foundry: 6, deepdrill: 3, arcfurnace: 10, fabricator: 14 };
+const GEN_OUTPUT = 20;    // MW per fuelled Generator
+const SOLAR_OUTPUT = 8;   // MW per Solar Panel
+const COAL_SECONDS = 5;   // one coal runs a Generator at full load for this long
+const GEN_FUEL_CAP = 10;
+const familyOf = (type) => (BUILDINGS[type] && BUILDINGS[type].family) || type;
+const speedOf = (type) => (BUILDINGS[type] && BUILDINGS[type].speed) || 1;
+const CRAFTERS = { smelter: 'iron_plate', assembler: 'gear', foundry: 'steel', arcfurnace: 'iron_plate', fabricator: 'gear' };
 // Buildings that push items out of their front face (for belt-curve detection).
-const FRONT_OUTPUT = { belt: 1, miner: 1, smelter: 1, assembler: 1, foundry: 1, chest: 1, splitter: 1, sorter: 1 };
+const FRONT_OUTPUT = { belt: 1, miner: 1, smelter: 1, assembler: 1, foundry: 1, chest: 1, splitter: 1, sorter: 1, deepdrill: 1, arcfurnace: 1, fabricator: 1 };
 
 const UPGRADES = {
   miner_speed: { name: 'Drill Bits',      desc: 'Miners +25% speed',             base: 150, growth: 2.1, max: 10, icon: 'miner' },
@@ -91,13 +108,17 @@ const UPGRADES = {
 
 const RESEARCH = {
   splitter:    { name: 'Splitters',   cost: 300,   req: [],                          desc: 'Unlocks the Splitter.' },
-  assembly:    { name: 'Assembly',    cost: 800,   req: [],                          desc: 'Unlocks the Assembler and the Gear recipe.' },
+  assembly:    { name: 'Assembly',    cost: 800,   req: [],                          desc: 'Unlocks the Assembler, the Gear recipe and coal Generators to power them.' },
   logistics:   { name: 'Logistics',   cost: 2500,  req: ['splitter'],                desc: 'Unlocks Chests, Tunnels and Sorters.' },
   electronics: { name: 'Electronics', cost: 6000,  req: ['assembly'],                desc: 'Copper Wire and Circuit recipes.' },
   metallurgy:  { name: 'Metallurgy',  cost: 15000, req: ['assembly'],                desc: 'Unlocks the Foundry and Steel Beams.' },
+  deepdrills:  { name: 'Deep Drills', cost: 35000, req: ['metallurgy'],              desc: 'Unlocks the Deep Drill: a Miner that digs 3x faster.' },
   motors:      { name: 'Motors',      cost: 6e4,   req: ['electronics', 'metallurgy'], desc: 'Motor recipe: gears + steel + circuit.' },
+  solar:       { name: 'Solar Power', cost: 1.5e5, req: ['electronics'],             desc: 'Unlocks Solar Panels: power without coal.' },
   goldworking: { name: 'Goldworking', cost: 2e5,   req: ['electronics'],             desc: 'Smelters can turn gold ore into gold bars. Gold lies far from the centre.' },
+  arcfurnace:  { name: 'Arc Furnaces', cost: 4.5e5, req: ['deepdrills', 'goldworking'], desc: 'Unlocks the Arc Furnace: a Smelter that works 3x faster.' },
   processors:  { name: 'Processors',  cost: 1e6,   req: ['goldworking'],             desc: 'Processor recipe: circuits + gold bar.' },
+  fabrication: { name: 'Fabrication', cost: 2.5e6, req: ['processors', 'arcfurnace'], desc: 'Unlocks the Fabricator: an Assembler that works 3x faster.' },
   robotics:    { name: 'Robotics',    cost: 5e6,   req: ['processors', 'motors'],    desc: 'Robot recipe: motor + processors + steel.' },
   spaceflight: { name: 'Spaceflight', cost: 2.5e7, req: ['robotics'],                desc: 'Unlocks the Launch Pad. Launch the Orbital Foundry!' },
 };
@@ -133,6 +154,7 @@ const ACHIEVEMENTS = [
   { id: 'belts_100',   name: 'Spaghetti',         desc: 'Have 100 conveyors at once',      check: (g) => g.count('belt') >= 100 },
   { id: 'belts_500',   name: 'Belt Baron',        desc: 'Have 500 conveyors at once',      check: (g) => g.count('belt') >= 500 },
   { id: 'miners_30',   name: 'Strip Mine',        desc: 'Have 30 miners at once',          check: (g) => g.count('miner') >= 30 },
+  { id: 'power',       name: 'Let There Be Light', desc: 'Power your factory with a Generator', check: (g) => g.count('generator') >= 1 && g.power && g.power.supply > 0 },
   { id: 'tunnels',     name: 'Mole People',       desc: 'Build a working tunnel pair',     check: (g) => g.buildings.some((b) => b.type === 'tunnel' && b.mode === 'in' && g.tunnelPartner(b)) },
   { id: 'income_10',   name: 'Side Hustle',       desc: 'Earn $10/s',                      check: (g) => g.incomeRate >= 10 },
   { id: 'income_1k',   name: 'Going Concern',     desc: 'Earn $1K/s',                      check: (g) => g.incomeRate >= 1e3 },
@@ -201,9 +223,12 @@ const STORY = {
     ['bolt', 'BZZT! Oh! A visitor! …Wait. You have Ada\'s eyes. You must be her grandchild!'],
     ['bolt', 'I am BOLT, her assistant. Model 7. Mostly rust. She left you this island — and her workshop.'],
     ['ada', 'My dear, I spent my life dreaming of the Orbital Foundry: a factory among the stars. I ran out of time. You won\'t. Start small. — Ada'],
-    ['bolt', 'Start small! I can do small. See the grey rocks? Iron! Press 2 (Miner) and click on them.'],
+    ['bolt', 'Start small! I can do small. Walk with WASD (Shift to run). See the grey rocks? Iron! Walk up close, press 2 (Miner) and click on them.'],
   ],
-  g0: [['bolt', 'Beautiful drilling! Now press 1 and drag Conveyors from the Miner\'s front into the Market in the middle.']],
+  g0: [
+    ['bolt', 'Beautiful drilling! Press 1 and drag Conveyors from the Miner\'s yellow arrow into the Market. Your arms are short, so walk alongside as you build!'],
+    ['bolt', 'Tip: Miners pass items through, so a row of Miners pointing the same way works as its own conveyor.'],
+  ],
   g1: [
     ['marlo', 'Well, well — fresh ore! Name\'s Marlo. I run the trading post here, and I\'ll buy anything you send into that Market.'],
     ['marlo', 'Raw ore is cheap, though. Melt it into plates (Smelter, key 3) and I\'ll pay four times as much.'],
@@ -215,12 +240,18 @@ const STORY = {
     ['quill', 'I can help with research. Start with Splitters — you\'ll want to divide your belts.'],
   ],
   g5: [['bolt', 'See the golden fence? Ada owned far more land than that. Buy more in the Upgrades tab!']],
-  g6: [['quill', 'Assembly research gives you Assemblers. Gears are the heart of every machine — and of the Foundry.']],
+  g6: [
+    ['quill', 'Assembly research gives you Assemblers. Gears are the heart of every machine — and of the Foundry.'],
+    ['bolt', 'Careful: Assemblers run on electricity! Build a Generator (key V) and feed it coal. A coal Miner pointed into it is the easy way.'],
+  ],
   g7: [['marlo', 'Gears sell like hot cakes! The mainland builders want bricks too: two stone each, straight from a Smelter.']],
   g8: [['quill', 'Your factory sounds tangled from here. Logistics research brings Chests, Tunnels and Sorters.']],
   g9: [['quill', 'Next, Electronics: copper wire, then circuits. Ada\'s notes say the Foundry\'s brain is made of them.']],
   g10: [['bolt', 'Circuits! My cousins! …Ada also needed steel. Foundries fuse iron plates with coal.']],
-  g11: [['marlo', 'Steel beams! The mainland can\'t get enough. Hit a thousand a second and we\'ll talk big plans.']],
+  g11: [
+    ['marlo', 'Steel beams! The mainland can\'t get enough. Hit a thousand a second and we\'ll talk big plans.'],
+    ['quill', 'With steel I can design Deep Drills, three times faster than a Miner. Check the Research tab!'],
+  ],
   g12: [['quill', 'Motors are next: gears, steel and a circuit. A space station needs hundreds of them.']],
   g13: [['bolt', 'Ada wrote: "gold glimmers far from home." Buy land toward the edges, then research Goldworking!']],
   g14: [['quill', 'Gold makes the finest conductors. Processors need two circuits and a gold bar.']],

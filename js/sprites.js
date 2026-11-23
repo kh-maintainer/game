@@ -282,16 +282,16 @@ function beltCurveFrame(f) {
   });
 }
 
-function minerFrame(f) {
+function minerFrame(f, o = {}) {
   return sprite(16, 16, (P) => {
     // base plate
     box(P, 0, 1, 15, 15, PAL.steel, PAL.mist, PAL.slate);
     for (const [x, y] of [[2, 3], [12, 3], [2, 13], [12, 13]]) P(x, y, 1, 1, PAL.slate);
     // housing (bobs while working)
     const b = f % 2;
-    box(P, 2, 3 + b, 11, 10, PAL.gold, '#fff1c4', PAL.orange);
+    box(P, 2, 3 + b, 11, 10, o.body || PAL.gold, o.light || '#fff1c4', o.shade || PAL.orange);
     // hazard band
-    for (let x = 3; x < 12; x++) P(x, 4 + b, 1, 1, ((x + f) >> 1) & 1 ? K : PAL.gold);
+    for (let x = 3; x < 12; x++) P(x, 4 + b, 1, 1, ((x + f) >> 1) & 1 ? K : (o.stripe || PAL.gold));
     // drill window
     P(4, 6 + b, 7, 5, K);
     P(5, 7 + b, 5, 3, PAL.mist);
@@ -306,14 +306,21 @@ function minerFrame(f) {
   });
 }
 
-function smelterFrame(f) {
+function smelterFrame(f, o = {}) {
+  // o.arc = electric Arc Furnace variant (blue flame, dark casing with coils)
+  const F = o.arc ? { orange: PAL.sky, red: PAL.blue, gold: PAL.cyan } : { orange: PAL.orange, red: PAL.red, gold: PAL.gold };
   return sprite(16, 16, (P) => {
-    box(P, 0, 1, 15, 15, PAL.steel, PAL.mist, PAL.slate);
-    // brick courses
-    for (let r = 0; r < 4; r++) {
-      const y = 3 + r * 3;
-      P(1, y, 13, 1, PAL.slate);
-      for (let x = 1 + (r % 2) * 3; x < 14; x += 6) P(x, y - 2 < 2 ? 2 : y - 2, 1, 2, PAL.slate);
+    if (o.arc) {
+      box(P, 0, 1, 15, 15, PAL.slate, PAL.steel, PAL.groove);
+      for (let y = 3; y < 14; y += 2) { P(1, y, 2, 1, f ? PAL.cyan : PAL.sky); P(12, y, 1, 1, f ? PAL.cyan : PAL.sky); }
+    } else {
+      box(P, 0, 1, 15, 15, PAL.steel, PAL.mist, PAL.slate);
+      // brick courses
+      for (let r = 0; r < 4; r++) {
+        const y = 3 + r * 3;
+        P(1, y, 13, 1, PAL.slate);
+        for (let x = 1 + (r % 2) * 3; x < 14; x += 6) P(x, y - 2 < 2 ? 2 : y - 2, 1, 2, PAL.slate);
+      }
     }
     // mouth (arched)
     P(3, 7, 9, 8, K);
@@ -322,11 +329,11 @@ function smelterFrame(f) {
     P(4, 7, 7, 1, PAL.groove);
     if (f > 0) {
       const hot = f === 1;
-      P(4, 10, 7, 4, hot ? PAL.orange : PAL.red);
-      P(5, 9, 5, 3, hot ? PAL.gold : PAL.orange);
-      P(6, 8, 3, 2, hot ? PAL.white : PAL.gold);
-      P(hot ? 5 : 8, 8, 1, 1, PAL.gold);
-      P(4, 14, 7, 1, PAL.red);
+      P(4, 10, 7, 4, hot ? F.orange : F.red);
+      P(5, 9, 5, 3, hot ? F.gold : F.orange);
+      P(6, 8, 3, 2, hot ? PAL.white : F.gold);
+      P(hot ? 5 : 8, 8, 1, 1, F.gold);
+      P(4, 14, 7, 1, F.red);
     } else {
       P(4, 12, 7, 2, '#3a1e2a');
       P(5, 13, 2, 1, PAL.plum);
@@ -339,9 +346,9 @@ function smelterFrame(f) {
   });
 }
 
-function assemblerFrame(f) {
+function assemblerFrame(f, o = {}) {
   return sprite(16, 16, (P) => {
-    box(P, 0, 1, 15, 15, PAL.blue, PAL.sky, PAL.navy);
+    box(P, 0, 1, 15, 15, o.body || PAL.blue, o.light || PAL.sky, o.shade || PAL.navy);
     // work bed
     P(2, 8, 11, 6, K);
     P(3, 9, 9, 4, PAL.navy);
@@ -596,6 +603,48 @@ function cloudSprite(seed) {
   });
 }
 
+// Coal Generator: hopper, firebox and a spinning flywheel. f: 0 off, 1-2 running.
+function generatorFrame(f) {
+  return sprite(16, 16, (P) => {
+    box(P, 0, 2, 16, 14, PAL.slate2, PAL.steel, PAL.slate);
+    // coal hopper
+    P(1, 0, 7, 6, K); P(2, 1, 5, 4, PAL.groove);
+    P(2, 1, 2, 1, PAL.steel); P(4, 2, 2, 1, PAL.slate2); P(3, 3, 1, 1, PAL.steel);
+    // firebox
+    P(2, 8, 6, 6, K);
+    P(3, 9, 4, 4, f ? (f === 1 ? PAL.orange : PAL.red) : '#2a1d2a');
+    if (f) { P(4, 10, 2, 2, PAL.gold); P(f === 1 ? 4 : 5, 10, 1, 1, PAL.white); }
+    // flywheel
+    disc(P, 11.5, 9.5, 3.6, K);
+    disc(P, 11.5, 9.5, 2.8, PAL.mist);
+    disc(P, 11.5, 9.5, 1.2, K);
+    const spokes = [[[11, 7], [11, 12]], [[9, 9], [14, 9]], [[9, 7], [13, 11]], [[13, 7], [9, 11]]];
+    const s = spokes[(f ? f + 1 : 0) % 4];
+    for (const [x, y] of s) P(x, y, 1, 1, PAL.slate);
+    // lightning badge
+    P(9, 3, 5, 3, K); P(10, 4, 1, 1, PAL.gold); P(11, 4, 1, 1, PAL.gold); P(12, 4, 1, 1, f ? PAL.gold : PAL.steel);
+  });
+}
+
+function solarFrame(f) {
+  return sprite(16, 16, (P) => {
+    P(0, 1, 16, 15, K);
+    P(1, 2, 14, 13, PAL.mist);
+    for (let gy = 0; gy < 3; gy++) for (let gx = 0; gx < 3; gx++) {
+      const x = 2 + gx * 4, y = 3 + gy * 4;
+      P(x, y, 3, 3, PAL.navy);
+      P(x, y, 3, 1, PAL.blue);
+      P(x, y, 1, 1, PAL.sky);
+    }
+    if (f) { P(3, 4, 1, 1, PAL.white); P(11, 8, 1, 1, PAL.white); P(7, 12, 1, 1, PAL.cyan); }
+  });
+}
+
+// Tiny lightning icon shown over machines that are short on power.
+function boltIcon(col) {
+  return fromStrings(['..kkk', '.kyyk', 'kyyk.', 'kyyyk', '.kyk.', 'kyk..', 'kk...'], { k: K, y: col });
+}
+
 // ------------------------------ characters ---------------------------------
 const SKIN = '#f2c09a', SKIN_D = '#d39a72';
 
@@ -730,6 +779,11 @@ const SPR = {
   tunnel: [],
   tunnelOut: [],
   launchpad: [],
+  deepdrill: [],
+  generator: [],
+  solar: [],
+  arcfurnace: [],
+  fabricator: [],
   rocket: null,
   trees: [],
   bush: null,
@@ -749,6 +803,13 @@ function buildSprites() {
   for (let f = 0; f < 4; f++) SPR.miner.push(minerFrame(f));
   for (let f = 0; f < 3; f++) SPR.smelter.push(smelterFrame(f));
   for (let f = 0; f < 4; f++) SPR.assembler.push(assemblerFrame(f));
+  for (let f = 0; f < 4; f++) SPR.deepdrill.push(minerFrame(f, { body: PAL.red, light: '#e0607a', shade: PAL.plum, stripe: PAL.orange }));
+  for (let f = 0; f < 3; f++) SPR.arcfurnace.push(smelterFrame(f, { arc: true }));
+  for (let f = 0; f < 3; f++) SPR.generator.push(generatorFrame(f));
+  for (let f = 0; f < 2; f++) SPR.solar.push(solarFrame(f));
+  SPR.lowPower = boltIcon(PAL.gold);
+  SPR.noPower = boltIcon(PAL.red);
+  for (let f = 0; f < 4; f++) SPR.fabricator.push(assemblerFrame(f, { body: PAL.plum, light: '#8a3c8a', shade: '#3a1838' }));
   for (let f = 0; f < 3; f++) SPR.foundry.push(foundryFrame(f));
   for (let f = 0; f < 2; f++) SPR.seller.push(sellerFrame(f));
   for (let f = 0; f < 2; f++) SPR.splitter.push(splitterFrame(f));
@@ -769,7 +830,7 @@ function buildSprites() {
   SPR.bush = bushSprite();
   SPR.rock = rockSprite();
   for (let i = 0; i < 4; i++) SPR.clouds.push(cloudSprite(77 + i));
-  for (const id of BUILD_ORDER) SPR.icons[id] = SPR[id][id === 'smelter' || id === 'foundry' ? 1 : 0];
+  for (const id of BUILD_ORDER) SPR.icons[id] = SPR[id][id === 'smelter' || id === 'foundry' || id === 'arcfurnace' || id === 'generator' ? 1 : 0];
 }
 
 // Cached data-URLs for use in DOM <img> tags.

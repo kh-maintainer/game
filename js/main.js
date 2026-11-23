@@ -100,6 +100,7 @@ const app = {
       this.acc -= TICK;
     }
     if (steps >= 10) this.acc = 0;
+    this.renderer.freeCam = !!this.ui.titleOpen;
     if (this.ui.titleOpen) { this.renderer.cam.x += dt * 0.9; this.renderer.cam.y += dt * 0.25; this.renderer.clampCamera(); }
     this.renderer.update(dt);
     Net.update(dt, this.ui.input);
@@ -149,6 +150,11 @@ function buildDemo(g) {
   g.place('belt', c.x, y + 3, 3);
   g.place('smelter', c.x, y + 2, 3);
   g.place('belt', c.x, y + 1, 3);
+  // power: a fuelled generator, solar panels and the advanced machines
+  g.place('generator', c.x - 3, y - 2, 0); g.at(c.x - 3, y - 2).fuel = 10;
+  g.place('solar', c.x + 3, y + 3, 0); g.place('solar', c.x + 4, y + 3, 0);
+  g.place('arcfurnace', c.x + 2, y - 3, 0); g.place('fabricator', c.x + 4, y - 3, 0);
+  ore(c.x + 6, y + 2, 'iron_ore'); g.place('deepdrill', c.x + 6, y + 2, 3);
   // set pieces
   g.place('foundry', c.x + 3, y - 3, 2);
   g.place('launchpad', c.x + 6, y - 4, 0);

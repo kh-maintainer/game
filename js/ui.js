@@ -18,6 +18,7 @@ const FORWARD_EVENTS = { ach: 1, goal: 1, launch: 1, story: 1, contract: 1 };
 const MINI_COLORS = {
   belt: '#8a8a98', miner: '#f2c94c', smelter: '#ff8a2a', seller: '#7be38f', splitter: '#e0c040', assembler: '#7898bb',
   foundry: '#c0573a', chest: '#b07a40', tunnel: '#5a5a66', sorter: '#b07ae0', launchpad: '#ffffff',
+  deepdrill: '#b13e53', arcfurnace: '#41a6f6', fabricator: '#c9a0ff', generator: '#ef7d57', solar: '#3b5dc9',
 };
 
 class UI {
@@ -48,6 +49,7 @@ class UI {
     this.bindMinimap();
     this.renderNet();
     this.r.boltQuip = () => this.boltQuip();
+    Sound.onTrack = (name) => { if (!this.titleOpen) this.toast(`♪ Now playing: ${name}`); };
     $('#goal').onclick = () => { Sound.play('click'); this.showJournal(); };
   }
 
@@ -356,6 +358,7 @@ class UI {
     const cheapest = Math.min(...Object.keys(UPGRADES).filter((id) => g.lvl(id) < UPGRADES[id].max).map((id) => g.upgradeCost(id)));
     const opts = [];
     if (blocked >= 3) opts.push(`${blocked} machines are backed up!`, 'Something is jammed. Check belts!');
+    if (g.power && g.power.ratio < 0.999) opts.push('Power is low! Feed the Generators coal.', 'Machines are sluggish. Need more MW!', 'Build another Generator?');
     if (g.money > cheapest * 1.5) opts.push('We can afford an upgrade!', 'Money burning a hole, boss.');
     if (g.contract && g.contract.t < 45 && g.contract.got < g.contract.qty) opts.push("Marlo's order is due soon!");
     if (this.r.nightLevel > 0.5) opts.push('Lanterns on. Spooky!', 'Fireflies! My favourite bugs.');
@@ -388,11 +391,11 @@ class UI {
     const pos = { x: b.x, y: b.y };
     let html = `<div class="ihead">${bldImg(b.type)}<div><div class="ctitle">${d.name}</div><div class="cdesc">${d.desc}</div></div>
       <button class="x" id="insp-close">✕</button></div><div class="istate"></div>`;
-    if (CRAFTERS[b.type] && b.type !== 'smelter') {
+    if (CRAFTERS[b.type] && familyOf(b.type) !== 'smelter') {
       html += '<div class="recipes">';
       for (const id in RECIPES) {
         const r = RECIPES[id];
-        if (r.b !== b.type) continue;
+        if (r.b !== familyOf(b.type)) continue;
         const ok = g.recipeUnlocked(id);
         const ins = Object.entries(r.in).map(([k, n]) => `${n}${itemImg(k)}`).join(' + ');
         const outs = Object.entries(r.out).map(([k, n]) => `${n}${itemImg(k)}`).join(' ');
@@ -433,18 +436,20 @@ class UI {
     if (!st) return;
     const g = this.game;
     let s = '';
-    if (b.type === 'miner') {
+    if (familyOf(b.type) === 'miner') {
       const ore = g.oreAt(b.x, b.y);
-      s = `Mining ${itemImg(ore)} ${ITEMS[ore].name} · ${Math.min(20, g.minerRate()).toFixed(2)}/s`;
+      s = ore ? `Mining ${itemImg(ore)} ${ITEMS[ore].name} · ${Math.min(20, g.minerRate() * speedOf(b.type)).toFixed(2)}/s` : 'No ore here';
+      if (b.pass && b.pass.length) s += `<br>Passing through: ${b.pass.map((it) => itemImg(it)).join('')}`;
       if (b.out > 0 && !b.working) s += ' · <span class="warn">output blocked</span>';
     } else if (CRAFTERS[b.type]) {
       const r = RECIPES[b.recipe];
       if (r) {
-        const rate = (g.craftMult() / r.time).toFixed(2);
+        const rate = (Math.min(20 * r.time, g.craftMult() * speedOf(b.type)) / r.time).toFixed(2);
         const inv = Object.keys(r.in).map((k) => `${itemImg(k)}${b.inv[k] || 0}/${r.in[k]}`).join(' ');
         s = `Making ${itemImg(k0(r.out))} ${ITEMS[k0(r.out)].name} · ${rate}/s<br>Input: ${inv} · ${Math.round(b.t * 100)}%`;
         if (b.outQ.length) s += ' · <span class="warn">output blocked</span>';
         if (!g.recipeUnlocked(b.recipe)) s += ' · <span class="warn">recipe locked</span>';
+        if (POWER_USE[b.type]) s += `<br>Power: ${POWER_USE[b.type]} MW · ${g.powerFor(b.type) >= 0.999 ? '<span class="good">full speed</span>' : `<span class="warn">${Math.round(g.powerFor(b.type) * 100)}% speed — need more power</span>`}`;
       } else s = 'Idle — feed it ore or stone.';
     } else if (b.type === 'belt' || b.type === 'splitter' || b.type === 'sorter') {
       s = b.item ? `Carrying ${itemImg(b.item)} ${ITEMS[b.item].name}` : 'Empty';
@@ -458,6 +463,11 @@ class UI {
       s = b.mode === 'in'
         ? (p ? `Entrance → exit ${Math.abs(p.x - b.x) + Math.abs(p.y - b.y)} tiles ahead · ${b.q.length} underground` : '<span class="warn">No exit found</span> — place an exit (same direction) within ' + TUNNEL_RANGE + ' tiles ahead')
         : 'Exit — items surface here.';
+    } else if (b.type === 'generator') {
+      const p = g.power || { supply: 0, demand: 0 };
+      s = `Fuel: ${itemImg('coal')} ${b.fuel}/${GEN_FUEL_CAP} · ${b.working ? '<span class="good">running</span>' : (b.fuel || b.burn > 0 ? 'idle (no demand)' : '<span class="warn">out of coal</span>')}<br>Grid: ${fmt(p.supply)} MW supply / ${fmt(p.demand)} MW demand`;
+    } else if (b.type === 'solar') {
+      s = `Making ${SOLAR_OUTPUT} MW, forever.`;
     } else if (b.type === 'seller') {
       s = `Sell value ×${fmt(g.sellMult())}`;
     } else if (b.type === 'launchpad') {
@@ -481,9 +491,7 @@ class UI {
       this.hideTip();
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       const t = tileOf(e);
-      down = { button: e.button, sx: e.clientX, sy: e.clientY, camx: this.r.cam.x, camy: this.r.cam.y, moved: false, last: t, placed: new Set() };
-      down.pan = e.button === 1 || (e.button === 0 && this.keys.has(' '));
-      if (down.pan) return;
+      down = { button: e.button, sx: e.clientX, sy: e.clientY, moved: false, last: t, placed: new Set() };
       if (e.button === 0 && e.altKey) { this.ping(t); down = null; return; }
       if (e.button === 2) {
         this.input.deleting = true;
@@ -500,13 +508,7 @@ class UI {
       if (!down) return;
       const dx = e.clientX - down.sx, dy = e.clientY - down.sy;
       if (Math.abs(dx) + Math.abs(dy) > 4) down.moved = true;
-      if (down.pan || (down.button === 0 && !this.input.tool)) {
-        const s = (this.r.scale() / this.r.dpr) * TILE;
-        this.r.cam.x = down.camx - dx / s;
-        this.r.cam.y = down.camy - dy / s;
-        this.r.clampCamera();
-        return;
-      }
+      if (down.button === 0 && !this.input.tool) return;
       if (t.x === down.last.x && t.y === down.last.y) return;
       if (down.button === 2) {
         this.walk(down.last, t, (p) => this.deleteAt(p));
@@ -527,7 +529,7 @@ class UI {
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (down && down.button === 0 && !down.moved && !this.input.tool && !down.pan && e.target === cv) {
+      if (down && down.button === 0 && !down.moved && !this.input.tool && e.target === cv) {
         const t = tileOf(e);
         const b = this.game.at(t.x, t.y);
         this.select(b);
@@ -539,17 +541,18 @@ class UI {
 
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
+      this.zoomAt(e.deltaY < 0 ? 1 : -1);
     }, { passive: false });
   }
 
-  zoomAt(delta, sx = window.innerWidth / 2, sy = window.innerHeight / 2) {
-    const before = this.r.screenToTile(sx, sy);
-    this.r.cam.zoom = Math.max(1, Math.min(7, this.r.cam.zoom + delta));
-    const after = this.r.screenToTile(sx, sy);
-    this.r.cam.x += before.x - after.x;
-    this.r.cam.y += before.y - after.y;
-    this.r.clampCamera();
+  // The camera is locked to your character, so zoom is always about the centre.
+  zoomAt(delta) {
+    this.r.cam.zoom = Math.max(2, Math.min(7, this.r.cam.zoom + delta));
+  }
+
+  tooFar() {
+    const now = performance.now();
+    if (now - (this.lastFar || 0) > 1200) { this.lastFar = now; this.toast('Too far away â€” walk closer (WASD)', true); }
   }
 
   // Step tile-by-tile from a to b (x first, then y) calling fn(tile, prevTile, dir).
@@ -568,6 +571,7 @@ class UI {
 
   placeAt(t, dir, down) {
     const tool = this.input.tool;
+    if (!this.r.inReach(t.x, t.y)) { if (!down || !down.placed.size) this.tooFar(); return; }
     const err = this.game.placeError(tool, t.x, t.y);
     if (err) {
       // stay quiet about occupied tiles / bare ground while dragging
@@ -585,6 +589,7 @@ class UI {
 
   deleteAt(t) {
     if (!this.game.at(t.x, t.y)) return;
+    if (!this.r.inReach(t.x, t.y)) { this.tooFar(); return; }
     if (this.input.selected && this.input.selected.x === t.x && this.input.selected.y === t.y) this.select(null);
     if (this.act({ type: 'remove', x: t.x, y: t.y }).ok) { Sound.play('remove'); this.r.dust(t.x, t.y); this.r.avatarAction('me', t.x, t.y); }
   }
@@ -664,11 +669,9 @@ class UI {
     if (this.keys.has('d') || this.keys.has('arrowright')) dx++;
     if (this.keys.has('w') || this.keys.has('arrowup')) dy--;
     if (this.keys.has('s') || this.keys.has('arrowdown')) dy++;
-    if (!dx && !dy) return;
-    const speed = (this.keys.has('shift') ? 70 : 32) / this.r.cam.zoom;
-    this.r.cam.x += dx * speed * dt;
-    this.r.cam.y += dy * speed * dt;
-    this.r.clampCamera();
+    // WASD walks your character; the camera follows them
+    const blocked = !$('#modal').classList.contains('hidden') || this.titleOpen;
+    this.r.move = blocked ? { dx: 0, dy: 0, sprint: false } : { dx, dy, sprint: this.keys.has('shift') };
   }
 
   updateStatus(t) {
@@ -770,17 +773,8 @@ class UI {
 
   // ------------------------------ minimap ----------------------------------
   bindMinimap() {
-    const mm = $('#minimap');
-    let dragging = false;
-    const go = (e) => {
-      const r = mm.getBoundingClientRect();
-      this.r.cam.x = ((e.clientX - r.left) / r.width) * this.game.w;
-      this.r.cam.y = ((e.clientY - r.top) / r.height) * this.game.h;
-      this.r.clampCamera();
-    };
-    mm.addEventListener('mousedown', (e) => { dragging = true; go(e); });
-    window.addEventListener('mousemove', (e) => { if (dragging) go(e); });
-    window.addEventListener('mouseup', () => { dragging = false; });
+    // The camera follows your character, so the minimap is a map, not a teleporter.
+    $('#minimap').title = 'Map — the blinking dot is you';
   }
 
   drawMinimap() {
@@ -814,9 +808,14 @@ class UI {
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(tl.x) + 0.5, Math.round(tl.y) + 0.5, Math.round(br.x - tl.x), Math.round(br.y - tl.y));
-    if (Net.partner && Net.partner.cursor) {
+    const A = this.r.actors;
+    if (A && Net.partner && A.partner.seen) {
       ctx.fillStyle = Net.partnerColor();
-      ctx.fillRect(Net.partner.cursor.x - 1, Net.partner.cursor.y - 1, 3, 3);
+      ctx.fillRect(Math.floor(A.partner.x) - 1, Math.floor(A.partner.y) - 1, 3, 3);
+    }
+    if (A && Math.floor(performance.now() / 400) % 2) {
+      ctx.fillStyle = Net.myColor();
+      ctx.fillRect(Math.floor(A.me.x) - 1, Math.floor(A.me.y) - 1, 3, 3);
     }
   }
 
@@ -854,15 +853,15 @@ class UI {
     this.modal(`<h2>How to play</h2>
       <p>Mine ore, smelt it, craft parts, and sell everything at the <b>Market</b>. Reinvest in upgrades, research and land, then <b>sell the company</b> for Patents and go again — bigger. Final goal: launch the <b>Orbital Foundry</b>.</p>
       <ul>
-        <li><b>1–9, 0, P</b> pick a building · <b>R</b> rotate (Shift+R back) · <b>Q</b> copy building under cursor · <b>Esc</b> cancel</li>
-        <li><b>Left click</b> build · <b>drag</b> to lay conveyor lines that bend with you</li>
+        <li><b>WASD</b> / arrows walk (Shift runs) · stand on a conveyor to ride it · <b>wheel</b> zoom</li>
+        <li><b>1–9, 0, V B Z X C P</b> pick a building · <b>R</b> rotate (Shift+R back) · <b>Q</b> copy building under cursor · <b>Esc</b> cancel</li>
+        <li><b>Left click</b> build within ~3 tiles of yourself (dotted ring) · <b>drag</b> to lay conveyor lines that bend with you</li>
         <li><b>Right click / drag</b> remove (full refund)</li>
         <li><b>Click</b> a building to inspect it, pick a recipe or set a filter</li>
-        <li><b>WASD</b> / arrows / drag ground to pan (Shift = faster) · <b>wheel</b> zoom · click the minimap to jump</li>
         <li>Co-op: <b>Enter</b> chat · <b>G</b> or <b>Alt+click</b> ping a tile for your partner</li>
         <li><b>M</b> mute · <b>H</b> help</li>
       </ul>
-      <p class="muted">Start: put a Miner on the grey iron patch facing a conveyor, and run the conveyor into the Market. Then put a Smelter in the line — plates sell for 4×. Follow the goal in the top-left.</p>
+      <p class="muted">Start: walk to the grey iron patch, put a Miner on it facing the Market, and run conveyors into the Market. Miners pass items through each other, so a row of them works like a belt. Later, Assemblers and other advanced machines need power: feed coal into Generators. Follow the goal in the top-left.</p>
       <div class="mbtns"><button id="m-ok">${fromTitle ? 'Back' : "Let's build"}</button></div>`, !fromTitle);
     $('#m-ok').onclick = () => { if (fromTitle) this.showTitle(!!this.app.hadSave); else this.closeModal(); };
   }
@@ -873,6 +872,7 @@ class UI {
       <label class="field">Player name <input id="s-name" maxlength="16" value="${esc(Net.myName)}"></label>
       <label class="field">Sound effects <input id="s-sfx" type="range" min="0" max="1" step="0.05" value="${S.sfx}"></label>
       <label class="field">Music <input id="s-music" type="range" min="0" max="1" step="0.05" value="${S.music}"></label>
+      <label class="field">Track <select id="s-track"><option value="auto"${(S.track ?? 'auto') === 'auto' ? ' selected' : ''}>Auto (rotate, calm at night)</option>${MUSIC_TRACKS.map((tr, i) => `<option value="${i}"${String(S.track) === String(i) ? ' selected' : ''}>${tr.name}</option>`).join('')}</select></label>
       <label class="check"><input id="s-mute" type="checkbox" ${S.muted ? 'checked' : ''}> Mute everything (M)</label>
       <label class="check"><input id="s-grid" type="checkbox" ${this.input.showGrid ? 'checked' : ''}> Show grid</label>
       <label class="check"><input id="s-day" type="checkbox" ${this.input.dayNight ? 'checked' : ''}> Day / night cycle</label>
@@ -890,6 +890,7 @@ class UI {
     };
     ['#s-sfx', '#s-music', '#s-mute', '#s-grid', '#s-day', '#s-name'].forEach((id) => $(id).addEventListener('input', upd));
     $('#s-sfx').addEventListener('change', () => Sound.play('buy'));
+    $('#s-track').addEventListener('change', (e) => { Sound.setTrack(e.target.value); saveSettings({ sound: Sound.settings }); });
     $('#s-save').onclick = () => { if (this.game.save()) this.toast('Game saved'); else this.toast('Guests can’t save — the host keeps the world', true); };
     $('#s-export').onclick = () => {
       const ta = $('#s-text');
@@ -1062,6 +1063,12 @@ class UI {
       const claim = g.claimablePatents();
       $('#patents').innerHTML = `✦ ${fmt(g.meta.patents)}${claim ? ` <span class="good">(+${fmt(claim)})</span>` : ''}`;
       if (claim > 0) $('#patents').classList.remove('hidden');
+      const p = g.power, pw = $('#power');
+      if (p && (p.demand > 0 || p.supply > 0)) {
+        pw.classList.remove('hidden');
+        pw.className = p.ratio >= 0.999 ? 'ok' : p.ratio >= 0.5 ? 'low' : 'bad';
+        pw.textContent = `⚡ ${fmt(p.supply)} / ${fmt(p.demand)} MW`;
+      } else pw.classList.add('hidden');
       const ds = dayState();
       const hour = Math.floor(((ds.ph + 0.25) % 1) * 24);
       $('#clock').innerHTML = this.input.dayNight

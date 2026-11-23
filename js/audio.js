@@ -171,48 +171,115 @@ const Sound = {
   },
 
   // -------------------------------- music -----------------------------------
-  // A procedural chiptune loop: i–VI–III–VII in A minor, bass + arpeggio +
-  // a pentatonic lead that re-improvises every 8 bars, plus soft hats.
+  // Five procedural chiptune tracks. In "auto" mode they rotate every couple
+  // of minutes, and the calm "Night Furnace" takes over after dark.
   startMusic() {
     if (this.music.on) return;
     this.music.on = true;
     this.music.next = this.ctx.currentTime + 0.2;
     this.music.step = 0;
+    this.music.track = this.pickTrack(-1);
     this.music.rng = mulberry32(1234);
     this.music.timer = setInterval(() => this.scheduleMusic(), 60);
+    if (this.onTrack) this.onTrack(MUSIC_TRACKS[this.music.track].name);
+  },
+
+  // Choose the next track (respecting a fixed choice from Settings).
+  pickTrack(current) {
+    const choice = this.settings.track ?? 'auto';
+    if (choice !== 'auto') return Math.max(0, Math.min(MUSIC_TRACKS.length - 1, +choice));
+    const night = typeof dayState === 'function' && dayState().night > 0.6;
+    const nightIdx = MUSIC_TRACKS.findIndex((tr) => tr.night);
+    if (night) return nightIdx;
+    let n = current;
+    do { n = (n + 1) % MUSIC_TRACKS.length; } while (MUSIC_TRACKS[n].night);
+    return n;
+  },
+
+  setTrack(choice) {
+    this.settings.track = choice;
+    if (!this.music.on) return;
+    this.music.track = this.pickTrack(this.music.track);
+    this.music.step = 0;
+    if (this.onTrack) this.onTrack(MUSIC_TRACKS[this.music.track].name);
   },
 
   scheduleMusic() {
     if (!this.ctx || this.ctx.state !== 'running') return;
-    const stepDur = 60 / 92 / 2; // 8th notes at 92 BPM
     while (this.music.next < this.ctx.currentTime + 0.3) {
-      if (this.settings.music > 0 && !this.settings.muted) this.musicStep(this.music.step, this.music.next);
-      this.music.next += stepDur;
+      const tr = MUSIC_TRACKS[this.music.track];
+      // switch tracks at phrase boundaries (every 128 steps ≈ 1–2 minutes)
+      if (this.music.step > 0 && this.music.step % 128 === 0) {
+        const nt = this.pickTrack(this.music.track);
+        if (nt !== this.music.track) {
+          this.music.track = nt;
+          this.music.step = 0;
+          this.music.next += 0.6; // a breath between songs
+          if (this.onTrack) this.onTrack(MUSIC_TRACKS[nt].name);
+          continue;
+        }
+      }
+      if (this.settings.music > 0 && !this.settings.muted) this.musicStep(tr, this.music.step, this.music.next);
+      this.music.next += 60 / tr.bpm / 2; // 8th notes
       this.music.step++;
     }
   },
 
-  musicStep(s, t) {
+  musicStep(tr, s, t) {
     const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
-    const PROG = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]; // Am F C G
-    const ARP = [0, 1, 2, 1, 0, 2, 1, 2];
-    const PENTA = [69, 72, 74, 76, 79, 81, 84];
     const bar = Math.floor(s / 8);
     const i = s % 8;
-    if (s % 64 === 0) this.music.rng = mulberry32(1000 + Math.floor(s / 64) % 4);
-    const chord = PROG[Math.floor(bar / 2) % 4];
-    const at = (f, dur, o) => this.tone(f, dur, Object.assign({ bus: this.musicBus, delay: Math.max(0, t - this.ctx.currentTime) }, o));
-    if (i % 4 === 0) at(midi(chord[0] - 12), 0.5, { type: 'triangle', vol: 0.35, attack: 0.01 });
-    if (i === 6) at(midi(chord[0] - 12 + 7), 0.2, { type: 'triangle', vol: 0.25 });
-    at(midi(chord[ARP[i]] + 12), 0.14, { type: 'square', vol: 0.03 });
-    if (i % 2 === 1) this.noise(0.03, { vol: 0.03, freq: 8000, type: 'highpass', bus: this.musicBus, delay: Math.max(0, t - this.ctx.currentTime) });
+    if (s % 64 === 0) this.music.rng = mulberry32(1000 + tr.seed + (Math.floor(s / 64) % 4));
+    const chord = tr.prog[Math.floor(bar / 2) % tr.prog.length];
+    const root = chord[0] - 12;
+    const delay = Math.max(0, t - this.ctx.currentTime);
+    const beat = 60 / tr.bpm;
+    const at = (f, dur, o) => this.tone(f, dur, Object.assign({ bus: this.musicBus, delay }, o));
+    // bass
+    switch (tr.bass) {
+      case 'pulse':
+        if (i % 4 === 0) at(midi(root), beat, { type: 'triangle', vol: 0.35, attack: 0.01 });
+        if (i === 6) at(midi(root + 7), beat * 0.4, { type: 'triangle', vol: 0.25 });
+        break;
+      case 'walk':
+        if (i % 2 === 0) at(midi(root + [0, 7, 12, 7][i / 2]), beat * 0.45, { type: 'triangle', vol: 0.32, attack: 0.01 });
+        break;
+      case 'drone':
+        if (i === 0) { at(midi(root), beat * 4, { type: 'triangle', vol: 0.3, attack: 0.25 }); at(midi(root + 7), beat * 4, { type: 'sine', vol: 0.12, attack: 0.4 }); }
+        break;
+      case 'drive':
+        at(midi(root + (i === 7 ? 12 : 0)), beat * 0.22, { type: 'triangle', vol: 0.3, attack: 0.005 });
+        break;
+    }
+    // arpeggio
+    const arpNote = chord[tr.arp[i] % chord.length] + 12;
+    at(midi(arpNote), beat * 0.3, { type: tr.arpWave, vol: tr.arpWave === 'square' ? 0.028 : 0.06 });
+    if (tr.shimmer && i % 2 === 0) at(midi(arpNote + 12), beat * 0.6, { type: 'sine', vol: 0.03, attack: 0.02 });
+    // hats
+    if (tr.hats && i % 2 === 1) this.noise(0.03, { vol: 0.03, freq: 8000, type: 'highpass', bus: this.musicBus, delay });
+    if (tr.hats && tr.bpm > 100 && i === 4) this.noise(0.08, { vol: 0.05, freq: 1800, type: 'bandpass', bus: this.musicBus, delay });
+    // lead: re-improvised every 8 bars from the track's scale
     const section = Math.floor(s / 64) % 2;
     if (section === 1 || bar % 4 >= 2) {
       const rr = this.music.rng();
-      if (i % 2 === 0 && rr < 0.55) {
-        const n = PENTA[Math.floor(this.music.rng() * PENTA.length)];
-        at(midi(n), rr < 0.2 ? 0.5 : 0.22, { type: 'square', vol: 0.045, attack: 0.01 });
+      if (i % 2 === 0 && rr < tr.density) {
+        const n = tr.scale[Math.floor(this.music.rng() * tr.scale.length)];
+        const long = rr < tr.density * 0.35;
+        at(midi(n), beat * (long ? 1.6 : 0.7), { type: tr.lead, vol: tr.lead === 'sine' || tr.lead === 'triangle' ? 0.09 : 0.04, attack: tr.night ? 0.05 : 0.01 });
       }
     }
   },
 };
+
+const MUSIC_TRACKS = [
+  { name: 'Morning Shift', seed: 0, bpm: 92, bass: 'pulse', arpWave: 'square', lead: 'square', density: 0.55, hats: true,
+    prog: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], arp: [0, 1, 2, 1, 0, 2, 1, 2], scale: [69, 72, 74, 76, 79, 81, 84] },
+  { name: 'Gearworks', seed: 10, bpm: 118, bass: 'walk', arpWave: 'triangle', lead: 'square', density: 0.6, hats: true,
+    prog: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]], arp: [0, 2, 1, 2, 0, 2, 1, 2], scale: [72, 74, 76, 79, 81, 84, 86] },
+  { name: 'Gold Rush', seed: 20, bpm: 104, bass: 'drive', arpWave: 'square', lead: 'sawtooth', density: 0.5, hats: true,
+    prog: [[52, 55, 59], [48, 52, 55], [50, 54, 57], [47, 50, 54]], arp: [0, 1, 2, 0, 1, 2, 1, 0], scale: [64, 67, 69, 71, 74, 76, 79] },
+  { name: 'Orbit', seed: 30, bpm: 84, bass: 'pulse', arpWave: 'triangle', lead: 'sine', density: 0.42, hats: false, shimmer: true,
+    prog: [[53, 57, 60, 64], [55, 59, 62, 65], [52, 55, 59, 62], [57, 60, 64, 67]], arp: [0, 1, 2, 3, 2, 3, 1, 2], scale: [65, 67, 69, 71, 72, 76, 77] },
+  { name: 'Night Furnace', seed: 40, bpm: 70, bass: 'drone', arpWave: 'triangle', lead: 'triangle', density: 0.3, hats: false, night: true,
+    prog: [[50, 53, 57, 60], [48, 52, 55, 59], [46, 50, 53, 57], [45, 48, 52, 55]], arp: [0, 1, 2, 3, 2, 1, 0, 1], scale: [62, 65, 67, 69, 72, 74] },
+];

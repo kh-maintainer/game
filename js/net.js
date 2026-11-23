@@ -282,7 +282,12 @@ const Net = {
     if (this.curTimer >= 0.1) {
       this.curTimer = 0;
       const h = input.hover;
-      const c = h ? { x: h.x, y: h.y, tool: input.tool, rot: input.rot } : null;
+      const me = this.app.renderer.actors && this.app.renderer.actors.me;
+      const r2 = (v) => Math.round(v * 20) / 20;
+      const c = {
+        x: h ? h.x : -99, y: h ? h.y : -99, tool: h ? input.tool : null, rot: input.rot,
+        ax: me ? r2(me.x) : undefined, ay: me ? r2(me.y) : undefined, f: me ? me.facing : 0, fl: me ? me.flip : false, mv: me ? me.moving : false,
+      };
       const key = JSON.stringify(c);
       if (key !== this.lastCursor) {
         this.lastCursor = key;

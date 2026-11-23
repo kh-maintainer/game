@@ -39,22 +39,30 @@ const LOGIC = {
     },
   },
 
+  // Miners (and Deep Drills) dig ore, and also pass along anything fed into
+  // their back or sides — so a row of miners works as its own conveyor.
   miner: {
-    init(b) { b.t = 0; b.out = 0; },
-    accepts() { return false; },
+    init(b) { b.t = 0; b.out = 0; if (!b.pass) b.pass = []; b.alt = 0; },
+    accepts(g, b, item, md) { return md !== opp(b.dir) && b.pass.length < 2; },
+    insert(g, b, item) { b.pass.push(item); },
     update(g, b, dt) {
       const ore = g.oreAt(b.x, b.y);
       b.working = false;
-      if (!ore) return;
-      if (b.out < 1) {
+      if (ore && b.out < 1) {
         b.working = true;
-        b.t += dt * g.minerRate();
+        b.t += dt * Math.min(20, g.minerRate() * speedOf(b.type) * g.powerFor(b.type));
         if (b.t >= 1) {
           b.t = Math.min(b.t - 1, 1);
           b.out += Math.random() < g.luckChance() ? 2 : 1;
         }
       }
-      if (b.out > 0 && g.pushTo(b, ore, b.dir)) b.out--;
+      // one item out per tick; alternate between passed-through items and our own ore
+      const own = ore && b.out > 0, passing = b.pass.length > 0;
+      if (!own && !passing) return;
+      const tryPass = passing && (!own || b.alt);
+      if (tryPass) {
+        if (g.pushTo(b, b.pass[0], b.dir)) { b.pass.shift(); b.alt = 0; }
+      } else if (g.pushTo(b, ore, b.dir)) { b.out--; b.alt = 1; }
     },
   },
 
@@ -70,7 +78,7 @@ const LOGIC = {
       const r = RECIPES[b.recipe];
       if (r && r.in[item]) return (b.inv[item] || 0) < r.in[item] * 2;
       // smelters re-tune themselves when idle and empty
-      if (b.type === 'smelter' && b.t === 0 && b.outQ.length === 0 && invEmpty(b.inv)) {
+      if (familyOf(b.type) === 'smelter' && b.t === 0 && b.outQ.length === 0 && invEmpty(b.inv)) {
         return !!g.smelterRecipeFor(item);
       }
       return false;
@@ -91,7 +99,7 @@ const LOGIC = {
         for (const k in r.in) if ((b.inv[k] || 0) < r.in[k]) { ready = false; break; }
         if (ready) {
           b.working = true;
-          b.t += (dt * g.craftMult()) / r.time;
+          b.t += (dt * Math.min(20 * r.time, g.craftMult() * speedOf(b.type) * g.powerFor(b.type))) / r.time;
           if (b.t >= 1) {
             b.t = 0;
             for (const k in r.in) b.inv[k] -= r.in[k];
@@ -178,6 +186,19 @@ const LOGIC = {
     },
   },
 
+  generator: {
+    init(b) { b.fuel = b.fuel || 0; b.burn = b.burn || 0; },
+    accepts(g, b, item) { return item === 'coal' && b.fuel < GEN_FUEL_CAP; },
+    insert(g, b) { b.fuel++; },
+    update() { /* fuel is burned in Game.updatePower */ },
+  },
+
+  solar: {
+    init() {},
+    accepts() { return false; },
+    update() {},
+  },
+
   seller: {
     init(b) { b.acc = 0; b.flash = 0; b.timer = 0; },
     accepts() { return true; },
@@ -213,7 +234,8 @@ const LOGIC = {
     },
   },
 };
-LOGIC.smelter = LOGIC.assembler = LOGIC.foundry = LOGIC.crafter;
+LOGIC.smelter = LOGIC.assembler = LOGIC.foundry = LOGIC.arcfurnace = LOGIC.fabricator = LOGIC.crafter;
+LOGIC.deepdrill = LOGIC.miner;
 
 // Fields that are purely cosmetic / derived and never need saving or syncing.
 const TRANSIENT = { working: 1, flash: 1, acc: 1, timer: 1, _shape: 1, over: 1 };
@@ -456,7 +478,7 @@ class Game {
       }
       case 'recipe': {
         const b = B(a.x, a.y);
-        if (!b || !CRAFTERS[b.type] || !RECIPES[a.r] || RECIPES[a.r].b !== b.type || !this.recipeUnlocked(a.r)) return { ok: false };
+        if (!b || !CRAFTERS[b.type] || !RECIPES[a.r] || RECIPES[a.r].b !== familyOf(b.type) || !this.recipeUnlocked(a.r)) return { ok: false };
         if (b.recipe !== a.r) { b.recipe = a.r; b.inv = {}; b.t = 0; b.outQ = []; }
         this.dirty = true;
         return { ok: true };
@@ -493,7 +515,7 @@ class Game {
     if (this.at(x, y)) return 'Tile occupied';
     if (this.isWater(x, y)) return "Can't build on water";
     if (!this.buildingUnlocked(type)) return 'Not researched';
-    if (type === 'miner' && !this.oreAt(x, y)) return 'Miners need ore';
+    if (familyOf(type) === 'miner' && !this.oreAt(x, y)) return 'Miners need ore';
     if (this.money < this.cost(type)) return 'Not enough money';
     return null;
   }
@@ -712,6 +734,37 @@ class Game {
     return true;
   }
 
+  // ------------------------------- power -----------------------------------
+  // One shared grid: Generators (while fuelled) and Solar Panels supply MW,
+  // advanced machines draw MW. Generators only burn coal in proportion to load.
+  updatePower(dt) {
+    let supply = 0, demand = 0;
+    const gens = [];
+    for (const b of this.buildings) {
+      const use = POWER_USE[b.type];
+      if (use) demand += use;
+      else if (b.type === 'generator') { if (b.burn > 0 || b.fuel > 0) { supply += GEN_OUTPUT; gens.push(b); } }
+      else if (b.type === 'solar') supply += SOLAR_OUTPUT;
+    }
+    const ratio = demand > 0 ? Math.min(1, supply / demand) : 1;
+    // solar covers its share first; generators make up the rest
+    const solar = supply - gens.length * GEN_OUTPUT;
+    const genLoad = gens.length ? Math.max(0, Math.min(1, (demand - solar) / (gens.length * GEN_OUTPUT))) : 0;
+    for (const b of gens) {
+      b.working = genLoad > 0;
+      if (!b.working) continue;
+      b.burn -= dt * genLoad;
+      if (b.burn <= 0) {
+        if (b.fuel > 0) { b.fuel--; b.burn += COAL_SECONDS; } else b.burn = 0;
+      }
+    }
+    this.power = { supply, demand, ratio };
+  }
+
+  powerFor(type) {
+    return POWER_USE[type] ? (this.power ? this.power.ratio : 0) : 1;
+  }
+
   // Buildings are simulated downstream-first so a full belt line moves in
   // lockstep: by the time an upstream building pushes, the tile in front has
   // already passed its own item on.
@@ -753,6 +806,7 @@ class Game {
     this.meta.life.playTime += dt;
     this.pending.length = 0;
     if (this.orderDirty || !this.order) this.rebuildOrder();
+    this.updatePower(dt);
     for (const b of this.order) LOGIC[b.type].update(this, b, dt);
 
     // Belts that were blocked may be free now that downstream items moved on.

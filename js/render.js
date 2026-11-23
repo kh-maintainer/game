@@ -22,6 +22,10 @@ const easeOutBack = (x) => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.p
 
 const LIGHTS = {
   smelter:   { r: 3.2, col: '255,150,70', need: 'working', at: [0.5, 0.65], glow: 0.35 },
+  arcfurnace:{ r: 3.4, col: '115,200,255', need: 'working', at: [0.5, 0.65], glow: 0.35 },
+  generator: { r: 2.6, col: '255,150,70', need: 'working', at: [0.3, 0.7], glow: 0.3 },
+  deepdrill: { r: 1.8, col: '255,180,140', at: [0.25, 0.15], glow: 0.15 },
+  fabricator:{ r: 1.8, col: '201,160,255', at: [0.75, 0.25], glow: 0.18 },
   foundry:   { r: 3.6, col: '255,110,60', need: 'working', at: [0.5, 0.55], glow: 0.4 },
   miner:     { r: 1.6, col: '255,220,140', at: [0.25, 0.15], glow: 0.15 },
   seller:    { r: 2.6, col: '255,210,140', at: [0.5, 0.5], glow: 0.18 },
@@ -36,7 +40,7 @@ class Renderer {
     this.ctx = canvas.getContext('2d');
     this.light = document.createElement('canvas');
     this.lctx = this.light.getContext('2d');
-    this.cam = { x: 0, y: 0, zoom: 3 };
+    this.cam = { x: 0, y: 0, zoom: 4 };
     this.particles = [];
     this.pings = [];
     this.critters = [];
@@ -154,14 +158,19 @@ class Renderer {
     switch (b.type) {
       case 'belt': return b._shape ? SPR.beltCurve[bf] : SPR.belt[bf];
       case 'tunnel': return b.mode === 'in' ? SPR.tunnel[bf] : SPR.tunnelOut[bf];
-      case 'miner': return SPR.miner[b.working ? Math.floor(t * 9) % 4 : 0];
+      case 'miner':
+      case 'deepdrill': return SPR[b.type][b.working ? Math.floor(t * (b.type === 'deepdrill' ? 14 : 9)) % 4 : 0];
       case 'smelter':
-      case 'foundry': return SPR[b.type][b.working ? 1 + (Math.floor(t * 6) % 2) : 0];
-      case 'assembler': return SPR.assembler[b.working ? Math.floor(t * 5) % 4 : 0];
+      case 'foundry':
+      case 'arcfurnace': return SPR[b.type][b.working ? 1 + (Math.floor(t * 6) % 2) : 0];
+      case 'assembler':
+      case 'fabricator': return SPR[b.type][b.working ? Math.floor(t * (b.type === 'fabricator' ? 10 : 5)) % 4 : 0];
       case 'seller': return SPR.seller[b.flash > 0 ? 1 : 0];
       case 'splitter': return SPR.splitter[b.item ? 1 : 0];
       case 'sorter': return SPR.sorter[b.item ? 1 : 0];
       case 'chest': return SPR.chest[b.store && b.store.length ? 1 : 0];
+      case 'generator': return SPR.generator[b.working ? 1 + (Math.floor(t * 8) % 2) : 0];
+      case 'solar': return SPR.solar[Math.floor(t * 0.7 + b.x) % 5 === 0 ? 1 : 0];
       case 'launchpad': return SPR.launchpad[b.launchT ? Math.floor(t * 8) % 2 : Math.floor(t) % 2];
     }
     return null;
@@ -383,6 +392,12 @@ class Renderer {
       ctx.drawImage(SPR.items[b.item], ix, iy - 1);
     }
 
+    // power warnings over machines that are short on electricity
+    const pr = game.power ? game.power.ratio : 1;
+    if (pr < 0.999 && Math.floor(t * 2.5) % 2) {
+      for (const b of visible) if (POWER_USE[b.type]) ctx.drawImage(pr < 0.35 ? SPR.noPower : SPR.lowPower, b.x * TILE + 1, b.y * TILE - 4);
+    }
+
     // per-building overlays & emitters
     const zoomedIn = this.cam.zoom >= 2;
     for (const b of visible) {
@@ -393,7 +408,7 @@ class Renderer {
           ctx.fillStyle = '#a7f070';
           ctx.fillRect(b.x * TILE + 2, b.y * TILE + 15, Math.round(12 * b.t), 1);
         }
-        if (b.recipe && (b.type !== 'smelter' || this.cam.zoom >= 4) && this.cam.zoom >= 3) {
+        if (b.recipe && (familyOf(b.type) !== 'smelter' || this.cam.zoom >= 4) && this.cam.zoom >= 3) {
           const bob = Math.round(Math.sin(t * 3 + b.x) * 0.6);
           ctx.fillStyle = 'rgba(26,28,44,0.75)';
           ctx.fillRect(b.x * TILE + 9, b.y * TILE - 3 + bob, 8, 8);
@@ -401,13 +416,17 @@ class Renderer {
         }
         if (b.working) {
           if (b.type === 'smelter' && Math.random() < 0.06) this.smoke(b.x + 0.75, b.y + 0.05, '#c2c2cc');
+          if (b.type === 'arcfurnace' && Math.random() < 0.08) this.burst(b.x + 0.5, b.y + 0.55, 2, ['#73eff7', '#f4f4f4', '#41a6f6'], 1.6, 0.3, 0);
+          if (b.type === 'fabricator' && Math.random() < 0.06) this.burst(b.x + 0.55, b.y + 0.5, 2, ['#c9a0ff', '#f4f4f4'], 1.4, 0.3, 0);
           if (b.type === 'foundry' && Math.random() < 0.05) this.smoke(b.x + 0.8, b.y + 0.1, '#f4f4f4');
           if (b.type === 'foundry' && Math.random() < 0.04) this.burst(b.x + 0.5, b.y + 0.5, 2, ['#ffcd75', '#ef7d57'], 1.6, 0.5, 3);
           if (b.type === 'assembler' && Math.random() < 0.03) this.burst(b.x + 0.55, b.y + 0.5, 2, ['#73eff7', '#f4f4f4'], 1.2, 0.3, 0);
         }
-      } else if (b.type === 'miner' && b.working && Math.random() < 0.025) {
+      } else if (familyOf(b.type) === 'miner' && b.working && Math.random() < (b.type === 'deepdrill' ? 0.06 : 0.025)) {
         const ore = game.oreAt(b.x, b.y);
         this.burst(b.x + 0.5, b.y + 0.8, 2, ore ? ORE_COLORS[ore] : ['#9a6a44'], 1.3, 0.5, 3);
+      } else if (b.type === 'generator' && b.working && Math.random() < 0.07) {
+        this.smoke(b.x + 0.3, b.y + 0.05, '#7a7a88');
       } else if (b.type === 'sorter' && b.filter) {
         ctx.drawImage(SPR.items[b.filter], b.x * TILE + 4, b.y * TILE + 4);
       } else if (b.type === 'chest' && zoomedIn && b.store) {
@@ -618,6 +637,19 @@ class Renderer {
     // partner cursor
     if (partner && partner.cursor) this.drawCursor(partner.cursor, partner.color, true);
 
+    // build-range ring around your character while a tool is selected
+    if (input.tool && this.actors) {
+      const a = this.actors.me;
+      ctx.strokeStyle = 'rgba(244,244,244,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.lineDashOffset = -t * 4;
+      ctx.beginPath();
+      ctx.arc(a.x * TILE, (a.y - 0.4) * TILE, BUILD_RANGE * TILE, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // hover / ghost
     const h = input.hover;
     if (h && game.inBounds(h.x, h.y)) {
@@ -735,19 +767,65 @@ class Renderer {
     a.hammer = Math.max(0, a.hammer - dt);
   }
 
-  updateActors(dt) {
-    const A = this.actors, inp = this.lastInput, partner = this.lastPartner;
-    if (inp && inp.hover && this.game.inBounds(inp.hover.x, inp.hover.y)) {
-      // stand just below the tile you're pointing at, like you're working on it
-      A.me.tx = inp.hover.x + 0.5;
-      A.me.ty = inp.hover.y + 1.25;
+  // Can the character stand here? (map bounds + no water)
+  walkable(x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y - 0.2);
+    return this.game.inBounds(tx, ty) && !this.game.isWater(tx, ty);
+  }
+
+  // Is tile (x, y) within building reach of your character?
+  inReach(x, y) {
+    if (!this.actors) return true;
+    const a = this.actors.me;
+    return Math.hypot(x + 0.5 - a.x, y + 0.5 - (a.y - 0.4)) <= BUILD_RANGE;
+  }
+
+  // Your character: driven by WASD; conveyors carry you when you stand still.
+  stepMe(a, dt) {
+    const mv = this.move || { dx: 0, dy: 0, sprint: false };
+    let vx = mv.dx, vy = mv.dy;
+    const len = Math.hypot(vx, vy);
+    let speed = 0;
+    if (len > 0) {
+      speed = WALK_SPEED * (mv.sprint ? 1.7 : 1);
+      vx = (vx / len) * speed; vy = (vy / len) * speed;
+      if (Math.abs(vx) > Math.abs(vy) + 0.01) { a.facing = 2; a.flip = vx < 0; } else a.facing = vy < 0 ? 1 : 0;
+    } else {
+      // ride the conveyor you're standing on
+      const b = this.game.at(Math.floor(a.x), Math.floor(a.y - 0.2));
+      if (b && b.type === 'belt') {
+        const bs = Math.min(8, this.game.beltSpeed()), d = DIRS[b.dir];
+        vx = d.x * bs + (d.x ? 0 : (Math.floor(a.x) + 0.5 - a.x) * 4);
+        vy = d.y * bs + (d.y ? 0 : (Math.floor(a.y - 0.2) + 0.7 - a.y) * 4);
+      }
     }
-    this.moveActor(A.me, dt);
-    if (partner && partner.cursor) {
-      if (!A.partner.seen) { A.partner.x = partner.cursor.x + 0.5; A.partner.y = partner.cursor.y + 1.25; A.partner.seen = true; }
-      A.partner.tx = partner.cursor.x + 0.5;
-      A.partner.ty = partner.cursor.y + 1.25;
+    // move each axis separately so you slide along shorelines
+    const nx = a.x + vx * dt, ny = a.y + vy * dt;
+    if (this.walkable(nx, a.y)) a.x = nx;
+    if (this.walkable(a.x, ny)) a.y = ny;
+    a.moving = len > 0;
+    if (a.moving) a.walk += dt * (4 + speed * 1.2);
+    a.hammer = Math.max(0, a.hammer - dt);
+  }
+
+  updateActors(dt) {
+    const A = this.actors, partner = this.lastPartner;
+    this.stepMe(A.me, dt);
+    if (partner && partner.cursor && partner.cursor.ax !== undefined) {
+      const pc = partner.cursor;
+      if (!A.partner.seen) { A.partner.x = pc.ax; A.partner.y = pc.ay; A.partner.seen = true; }
+      A.partner.tx = pc.ax;
+      A.partner.ty = pc.ay;
       this.moveActor(A.partner, dt);
+      if (!pc.mv && Math.hypot(A.partner.tx - A.partner.x, A.partner.ty - A.partner.y) < 0.3) A.partner.moving = false;
+      A.partner.facing = pc.f ?? A.partner.facing;
+      A.partner.flip = !!pc.fl;
+    }
+    // the camera is locked to your character (except on the title screen)
+    if (!this.freeCam) {
+      const k = Math.min(1, dt * 9);
+      this.cam.x += (A.me.x - this.cam.x) * k;
+      this.cam.y += (A.me.y - 0.5 - this.cam.y) * k;
     }
     // BOLT hovers at your shoulder, lagging behind a little
     const b = A.bolt;
@@ -846,7 +924,7 @@ class Renderer {
     const { ctx, game } = this;
     if (!game.inBounds(cur.x, cur.y)) return;
     if (cur.tool && BUILDINGS[cur.tool]) {
-      const err = isPartner ? null : game.placeError(cur.tool, cur.x, cur.y);
+      const err = isPartner ? null : (!this.inReach(cur.x, cur.y) ? 'far' : game.placeError(cur.tool, cur.x, cur.y));
       ctx.globalAlpha = isPartner ? 0.4 : 0.6;
       this.drawRot(SPR.icons[cur.tool], cur.x, cur.y, BUILDINGS[cur.tool].dir ? cur.rot : 0);
       ctx.globalAlpha = 1;

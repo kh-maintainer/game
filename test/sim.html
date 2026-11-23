@@ -39,8 +39,31 @@ try {
   g3.place('miner', c.x - 5, c.y, 0); g3.place('belt', c.x - 4, c.y, 0);
   g3.place('smelter', c.x - 3, c.y, 0); g3.place('belt', c.x - 2, c.y, 0);
   g3.place('assembler', c.x - 1, c.y, 0);
+  run(g3, 30);
+  check('assembler idle without power', !(g3.stats.sold.gear > 0) && g3.power.ratio === 0, 'ratio=' + g3.power.ratio);
+  // coal miner -> generator powers the grid
+  g3.ore[(c.y + 3) * g3.w + c.x - 5] = 'coal';
+  g3.place('miner', c.x - 5, c.y + 3, 0);
+  g3.place('generator', c.x - 4, c.y + 3, 0);
   run(g3, 60);
-  check('assembler makes gears', (g3.stats.sold.gear || 0) > 3, JSON.stringify(g3.stats.sold));
+  check('generator powers assembler', (g3.stats.sold.gear || 0) > 3 && g3.power.ratio === 1, JSON.stringify(g3.stats.sold) + ' ratio=' + g3.power.ratio);
+  const gen = g3.at(c.x - 4, c.y + 3);
+  check('generator burns coal slowly at low load', gen.fuel > 0 && gen.fuel <= GEN_FUEL_CAP, 'fuel=' + gen.fuel);
+
+  // 4b. miners chain: three miners in a row all pushing east, output passes through
+  let gch = fresh(19); c = gch.center();
+  for (let x = c.x - 3; x < c.x; x++) { gch.ore[c.y * gch.w + x] = "iron_ore"; gch.place("miner", x, c.y, 0); }
+  run(gch, 40);
+  const chainRate = gch.stats.sold.iron_ore / 40;
+  check('miner chain passes items through', chainRate > 1.5, 'items/s=' + chainRate.toFixed(2) + ' (one miner = ' + BASE_MINER_RATE + ')');
+
+  // 4c. deep drill is 3x a miner (needs power)
+  let gd = fresh(23); gd.research.deepdrills = true; gd.research.solar = true; c = gd.center();
+  gd.ore[c.y * gd.w + c.x - 1] = 'iron_ore'; gd.place('deepdrill', c.x - 1, c.y, 0);
+  gd.place('solar', c.x + 3, c.y + 3, 0);
+  run(gd, 30);
+  const ddRate = gd.stats.sold.iron_ore / 30;
+  check('deep drill ~3x miner speed', ddRate > BASE_MINER_RATE * 2.5, 'items/s=' + ddRate.toFixed(2));
 
   // 5. tunnel: miner -> tunnel in ... tunnel out -> belt -> market
   let g4 = fresh(3); g4.research.logistics = true; g4.research.splitter = true; c = g4.center();
