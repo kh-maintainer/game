@@ -66,22 +66,22 @@ const RECIPES = {
 };
 
 const BUILDINGS = {
-  belt:      { name: 'Conveyor',   cost: 2,    growth: 1.0,  dir: true,  key: '1', desc: 'Moves items forward. Click and drag to lay a line — it bends to follow you.' },
-  miner:     { name: 'Miner',      cost: 40,   growth: 1.12, dir: true,  key: '2', family: 'miner', desc: 'Place on ore. Pushes ore out of its front — and passes along items fed in from behind, so miners can chain.' },
-  smelter:   { name: 'Smelter',    cost: 100,  growth: 1.15, dir: true,  key: '3', desc: 'Ore into plates or bars, stone into bricks. Picks its recipe automatically.' },
-  seller:    { name: 'Market',     cost: 150,  growth: 1.35, dir: false, key: '4', desc: 'Sells anything delivered to it, from any side.' },
-  splitter:  { name: 'Splitter',   cost: 30,   growth: 1.04, dir: true,  key: '5', desc: 'Takes items from behind and deals them front / left / right in turn.', unlock: 'splitter' },
-  assembler: { name: 'Assembler',  cost: 500,  growth: 1.18, dir: true,  key: '6', desc: 'Crafts parts. Click it to choose a recipe.', unlock: 'assembly' },
-  foundry:   { name: 'Foundry',    cost: 2500, growth: 1.2,  dir: true,  key: '7', desc: 'Iron plates + coal into steel beams.', unlock: 'metallurgy' },
-  chest:     { name: 'Chest',      cost: 80,   growth: 1.08, dir: true,  key: '8', desc: `Buffers up to ${CHEST_CAP} items and releases them out the front.`, unlock: 'logistics' },
-  tunnel:    { name: 'Tunnel',     cost: 40,   growth: 1.05, dir: true,  key: '9', desc: `Place an entrance, then an exit up to ${TUNNEL_RANGE} tiles ahead. Items travel underground.`, unlock: 'logistics' },
-  sorter:    { name: 'Sorter',     cost: 120,  growth: 1.06, dir: true,  key: '0', desc: 'Filtered item goes straight on, everything else goes left / right. Click to set the filter.', unlock: 'logistics' },
-  launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 2.0,  dir: false, key: 'P', desc: 'Feed it Robots to launch a piece of the Orbital Foundry. Every launch pays 5 patents; each one needs more robots.', unlock: 'spaceflight' },
-  generator: { name: 'Generator',  cost: 300,  growth: 1.15, dir: false, key: 'V', desc: 'Burns coal to make 20 MW of power for Assemblers and other advanced machines. Feed it coal from any side.', unlock: 'assembly' },
-  solar:     { name: 'Solar Panel', cost: 20000, growth: 1.12, dir: false, key: 'B', desc: 'Makes 8 MW of clean power, no fuel needed.', unlock: 'solar' },
-  deepdrill: { name: 'Deep Drill', cost: 450,  growth: 1.14, dir: true,  key: 'Z', family: 'miner', speed: 3, desc: 'A Miner that digs 3x faster. Chains like a Miner.', unlock: 'deepdrills' },
-  arcfurnace:{ name: 'Arc Furnace', cost: 3500, growth: 1.16, dir: true, key: 'X', family: 'smelter', speed: 3, desc: 'An electric Smelter: 3x faster, same recipes.', unlock: 'arcfurnace' },
-  fabricator:{ name: 'Fabricator', cost: 25000, growth: 1.18, dir: true, key: 'C', family: 'assembler', speed: 3, desc: 'A 3x faster Assembler. Click it to choose a recipe.', unlock: 'fabrication' },
+  belt:      { name: 'Conveyor',   cost: 2,    growth: 1,  dir: true,  key: '1', desc: 'Moves items forward. Click and drag to lay a line — it bends to follow you.' },
+  miner:     { name: 'Miner',      cost: 40,   growth: 1, dir: true,  key: '2', family: 'miner', desc: 'Place on ore. Pushes ore out of its front — and passes along items fed in from behind, so miners can chain.' },
+  smelter:   { name: 'Smelter',    cost: 100,  growth: 1, dir: true,  key: '3', desc: 'Ore into plates or bars, stone into bricks. Picks its recipe automatically.' },
+  seller:    { name: 'Market',     cost: 150,  growth: 1, dir: false, key: '4', desc: 'Sells anything delivered to it, from any side.' },
+  splitter:  { name: 'Splitter',   cost: 30,   growth: 1, dir: true,  key: '5', desc: 'Takes items from behind and deals them front / left / right in turn.', unlock: 'splitter' },
+  assembler: { name: 'Assembler',  cost: 500,  growth: 1, dir: true,  key: '6', desc: 'Crafts parts. Click it to choose a recipe.', unlock: 'assembly' },
+  foundry:   { name: 'Foundry',    cost: 2500, growth: 1,  dir: true,  key: '7', desc: 'Iron plates + coal into steel beams.', unlock: 'metallurgy' },
+  chest:     { name: 'Chest',      cost: 80,   growth: 1, dir: true,  key: '8', desc: `Buffers up to ${CHEST_CAP} items and releases them out the front.`, unlock: 'logistics' },
+  tunnel:    { name: 'Tunnel',     cost: 40,   growth: 1, dir: true,  key: '9', desc: `Place an entrance, then an exit up to ${TUNNEL_RANGE} tiles ahead. Items travel underground.`, unlock: 'logistics' },
+  sorter:    { name: 'Sorter',     cost: 120,  growth: 1, dir: true,  key: '0', desc: 'Filtered item goes straight on, everything else goes left / right. Click to set the filter.', unlock: 'logistics' },
+  launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 1,  dir: false, key: 'P', desc: 'Feed it Robots to launch a piece of the Orbital Foundry. Every launch pays 5 patents; each one needs more robots.', unlock: 'spaceflight' },
+  generator: { name: 'Generator',  cost: 300,  growth: 1, dir: false, key: 'V', desc: 'Burns coal to make 20 MW of power for Assemblers and other advanced machines. Feed it coal from any side.', unlock: 'assembly' },
+  solar:     { name: 'Solar Panel', cost: 20000, growth: 1, dir: false, key: 'B', desc: 'Makes 8 MW of clean power, no fuel needed.', unlock: 'solar' },
+  deepdrill: { name: 'Deep Drill', cost: 450,  growth: 1, dir: true,  key: 'Z', family: 'miner', speed: 3, desc: 'A Miner that digs 3x faster. Chains like a Miner.', unlock: 'deepdrills' },
+  arcfurnace:{ name: 'Arc Furnace', cost: 3500, growth: 1, dir: true, key: 'X', family: 'smelter', speed: 3, desc: 'An electric Smelter: 3x faster, same recipes.', unlock: 'arcfurnace' },
+  fabricator:{ name: 'Fabricator', cost: 25000, growth: 1, dir: true, key: 'C', family: 'assembler', speed: 3, desc: 'A 3x faster Assembler. Click it to choose a recipe.', unlock: 'fabrication' },
 };
 const BUILD_ORDER = ['belt', 'miner', 'smelter', 'seller', 'splitter', 'assembler', 'generator', 'foundry', 'chest', 'tunnel', 'sorter', 'solar', 'deepdrill', 'arcfurnace', 'fabricator', 'launchpad'];
 
