@@ -1,0 +1,46 @@
+<!DOCTYPE html><html><body><pre id="out">running</pre>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="../js/util.js"></script><script src="../js/data.js"></script><script src="../js/physics.js"></script>
+<script src="../js/sim.js"></script><script src="../js/bot.js"></script><script src="../js/session.js"></script><script src="../js/net.js"></script>
+<script>
+// Real WebRTC test: host + guest peers in one page through the PeerJS broker.
+const log = []; const out = () => { const s = log.join(' / ') + (window.done ? ' DONE' : ''); document.getElementById('out').textContent = s; document.title = s; };
+const code = 'T' + Math.random().toString(36).slice(2, 7).toUpperCase();
+const players = [{ name: 'H', paint: 0, body: 0 }, { name: 'G', paint: 1, body: 1 }];
+let host, guest, hb = new Bot(0, 2, 1), gb = new Bot(1, 2, 2), goals = 0, msgs = 0;
+const hostPeer = new Peer(NET_PREFIX + code);
+hostPeer.on('error', (e) => { log.push('host error ' + e.type); out(); });
+hostPeer.on('open', () => {
+  log.push('host registered ' + code); out();
+  hostPeer.on('connection', (conn) => conn.on('open', () => {
+    const link = Net.makeLink(conn);
+    host = new HostSession({ mode: 'online', arena: 'park', length: 30, players, link, seed: 9 });
+    log.push('host: guest connected'); out();
+  }));
+  const gp = new Peer();
+  gp.on('error', (e) => { log.push('guest error ' + e.type); out(); });
+  gp.on('open', () => {
+    const conn = gp.connect(NET_PREFIX + code, { reliable: true, serialization: 'json' });
+    conn.on('open', () => {
+      const link = Net.makeLink(conn);
+      const inner = { onMessage: null, send: (m) => link.send(m) };
+      link.onMessage = (m) => { msgs++; inner.onMessage && inner.onMessage(m); };
+      guest = new GuestSession({ start: { arena: 'park', length: 30, players }, link: inner, hooks: { fx: (e) => { if (e.k === 'goal') goals++; } } });
+      log.push('guest: connected'); out();
+    });
+  });
+});
+const t0 = performance.now();
+let last = performance.now();
+const iv = setInterval(() => {
+  const now = performance.now(), dt = (now - last) / 1000; last = now;
+  if (host) host.update(dt, [hb.input(host.match), null]);
+  if (guest) guest.update(dt, [gb.input({ cars: [guest.other, guest.me], ball: guest.ball, ballLive: guest.ballLive, phase: guest.phase, time: guest.time, ar: guest.ar, pads: guest.pads })]);
+  const el = (now - t0) / 1000;
+  if ((host && host.match.phase === 'over' && el > 5) || el > 75) {
+    clearInterval(iv);
+    log.push(`elapsed=${el.toFixed(0)}s hostPhase=${host && host.match.phase} hostScore=${host && host.match.score} guestScore=${guest && guest.score} guestSawGoals=${goals} msgsToGuest=${msgs} ping=${guest ? Math.round(guest.ping.rtt * 1000) : '-'}ms guestTouchesOnHost=${host && host.match.stats[1].touches}`);
+    window.done = true; out();
+  }
+}, 16);
+</script></body></html>

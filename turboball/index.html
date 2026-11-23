@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Turboball · rocket-car soccer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- PeerJS: WebRTC peer-to-peer for online play (no game server needed) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <!-- title -->
+    <section class="screen" id="scr-title">
+      <div class="title-wrap">
+        <h1 class="logo"><span class="l1">TURBO</span><span class="l2">BALL</span></h1>
+        <p class="tagline">Rocket-car soccer · 1v1 · online with a friend</p>
+        <div class="menu">
+          <button class="btn big primary" data-go="online">Play Online</button>
+          <button class="btn big" data-go="bot">Versus Bot</button>
+          <button class="btn big" data-go="local">Couch 2-Player</button>
+          <div class="row">
+            <button class="btn" data-go="garage">Garage</button>
+            <button class="btn" data-go="howto">How to play</button>
+            <button class="btn" data-go="settings">Settings</button>
+          </div>
+        </div>
+        <div class="now-playing" id="now-playing"></div>
+      </div>
+    </section>
+
+    <!-- online lobby -->
+    <section class="screen" id="scr-online">
+      <div class="panel wide">
+        <h2>Play Online</h2>
+        <div id="online-start" class="split">
+          <div class="card">
+            <h3>Host a match</h3>
+            <p class="muted">Create a room and send the code (or link) to a friend.</p>
+            <button class="btn primary" id="btn-host">Create room</button>
+          </div>
+          <div class="card">
+            <h3>Join a match</h3>
+            <p class="muted">Type the 4-letter code your friend gave you.</p>
+            <div class="row"><input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false"><button class="btn primary" id="btn-join">Join</button></div>
+          </div>
+        </div>
+        <div id="online-lobby" class="hidden">
+          <div class="room-code-wrap" id="room-code-wrap">
+            <div class="muted">Room code</div>
+            <div class="room-code" id="room-code">----</div>
+            <button class="btn small" id="btn-copy">Copy invite link</button>
+          </div>
+          <div class="versus" id="lobby-versus"></div>
+          <div id="lobby-host-opts">
+            <div class="label">Arena</div><div class="arena-pick" data-for="online"></div>
+            <div class="label">Match length</div><div class="len-pick" data-for="online"></div>
+          </div>
+          <div class="lobby-status" id="lobby-status">Waiting for your opponent…</div>
+          <button class="btn big primary" id="btn-start-online" disabled>Start match</button>
+        </div>
+        <button class="btn back" data-go="title">Back</button>
+      </div>
+    </section>
+
+    <!-- versus bot -->
+    <section class="screen" id="scr-bot">
+      <div class="panel wide">
+        <h2>Versus Bot</h2>
+        <div class="label">Difficulty</div>
+        <div class="diff-pick">
+          <button class="opt" data-diff="0"><b>Rookie</b><span>Learning to drive</span><i class="rec" data-rec="0"></i></button>
+          <button class="opt" data-diff="1"><b>Pro</b><span>Rotates, shoots, saves</span><i class="rec" data-rec="1"></i></button>
+          <button class="opt" data-diff="2"><b>Legend</b><span>Good luck</span><i class="rec" data-rec="2"></i></button>
+        </div>
+        <div class="label">Arena</div><div class="arena-pick" data-for="bot"></div>
+        <div class="label">Match length</div><div class="len-pick" data-for="bot"></div>
+        <button class="btn big primary" id="btn-start-bot">Kick off</button>
+        <button class="btn back" data-go="title">Back</button>
+      </div>
+    </section>
+
+    <!-- couch 2p -->
+    <section class="screen" id="scr-local">
+      <div class="panel wide">
+        <h2>Couch 2-Player</h2>
+        <div class="split">
+          <div class="card"><h3>Player 1 (left)</h3><p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>L-Shift</kbd> boost · <kbd>Space</kbd> hop</p><p class="muted">or gamepad 1</p></div>
+          <div class="card"><h3>Player 2 (right)</h3><p class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> drive · <kbd>R-Shift</kbd> or <kbd>/</kbd> boost · <kbd>Enter</kbd> hop</p><p class="muted">or gamepad 2</p></div>
+        </div>
+        <div class="label">Player 2 paint</div><div class="paint-pick" id="p2-paint"></div>
+        <div class="label">Arena</div><div class="arena-pick" data-for="local"></div>
+        <div class="label">Match length</div><div class="len-pick" data-for="local"></div>
+        <button class="btn big primary" id="btn-start-local">Kick off</button>
+        <button class="btn back" data-go="title">Back</button>
+      </div>
+    </section>
+
+    <!-- garage -->
+    <section class="screen" id="scr-garage">
+      <div class="panel wide">
+        <h2>Garage</h2>
+        <div class="garage">
+          <canvas id="garage-preview" width="520" height="300"></canvas>
+          <div class="garage-opts">
+            <div class="label">Driver name</div>
+            <input id="name-input" maxlength="14" placeholder="Your name" autocomplete="off" spellcheck="false">
+            <div class="label">Body</div><div class="body-pick" id="body-pick"></div>
+            <div class="label">Paint</div><div class="paint-pick" id="paint-pick"></div>
+          </div>
+        </div>
+        <button class="btn back" data-go="title">Done</button>
+      </div>
+    </section>
+
+    <!-- how to play -->
+    <section class="screen" id="scr-howto">
+      <div class="panel wide">
+        <h2>How to play</h2>
+        <p class="lead-text">Knock the ball into your opponent's goal. Most goals when the clock runs out wins. If it's tied, overtime goes on until someone scores.</p>
+        <div class="split">
+          <div class="card">
+            <h3>Controls</h3>
+            <table class="ctl">
+              <tr><td><kbd>W</kbd> / <kbd>↑</kbd></td><td>Accelerate</td></tr>
+              <tr><td><kbd>S</kbd> / <kbd>↓</kbd></td><td>Brake / reverse</td></tr>
+              <tr><td><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd></td><td>Steer</td></tr>
+              <tr><td><kbd>Shift</kbd> / left mouse</td><td>Boost</td></tr>
+              <tr><td><kbd>Space</kbd> / right mouse</td><td>Hop (steer while hopping to side-flip, hold back to back-flip)</td></tr>
+              <tr><td><kbd>1</kbd>–<kbd>5</kbd></td><td>Quick chat</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Pause / menu</td></tr>
+              <tr><td>Gamepad</td><td>RT/LT drive, stick steer, A hop, B/X/RB boost</td></tr>
+            </table>
+          </div>
+          <div class="card">
+            <h3>Tips</h3>
+            <ul class="tips">
+              <li><b>Boost pads:</b> big orange pads refill you to 100, small ones give +22. Boost resets to 33 at every kickoff.</li>
+              <li><b>Hop</b> into the ball to pop it up and hit it much harder. Hop over your opponent's car to dodge a bump.</li>
+              <li>Hit the ball while <b>boosting</b> for extra power.</li>
+              <li>Get <b>behind</b> the ball before you shoot. Driving at it from the wrong side scores own goals.</li>
+              <li><b>Frostbite Rink</b> is ice (you'll slide). <b>Dune Bowl</b> sand slows the ball.</li>
+              <li>A goal plays an instant <b>replay</b>. Press Space or Enter to skip it.</li>
+            </ul>
+          </div>
+        </div>
+        <button class="btn back" data-go="title">Back</button>
+      </div>
+    </section>
+
+    <!-- settings -->
+    <section class="screen" id="scr-settings">
+      <div class="panel">
+        <h2>Settings</h2>
+        <label class="slider">Music <input type="range" min="0" max="1" step="0.05" id="set-music"></label>
+        <label class="slider">Sound effects <input type="range" min="0" max="1" step="0.05" id="set-sfx"></label>
+        <label class="check"><input type="checkbox" id="set-shake"> Screen shake</label>
+        <div class="label">Soundtrack</div>
+        <div class="tracks" id="track-list"></div>
+        <button class="btn back" data-go="title">Back</button>
+      </div>
+    </section>
+
+    <!-- pause -->
+    <section class="screen" id="scr-pause">
+      <div class="panel">
+        <h2>Paused</h2>
+        <p class="muted" id="pause-note"></p>
+        <button class="btn big primary" id="btn-resume">Resume</button>
+        <button class="btn big" id="btn-quit">Leave match</button>
+      </div>
+    </section>
+
+    <!-- results -->
+    <section class="screen" id="scr-results">
+      <div class="panel wide results">
+        <div class="result-title" id="res-title">VICTORY</div>
+        <div class="result-score" id="res-score"></div>
+        <table class="stats" id="res-stats"></table>
+        <div class="res-note" id="res-note"></div>
+        <div class="row center">
+          <button class="btn big primary" id="btn-rematch">Rematch</button>
+          <button class="btn big" id="btn-menu">Main menu</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="chatbar" class="hidden"><span><kbd>1</kbd> Nice shot!</span><span><kbd>2</kbd> What a save!</span><span><kbd>3</kbd> Wow!</span><span><kbd>4</kbd> Oops…</span><span><kbd>5</kbd> GG</span></div>
+    <div id="toasts"></div>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/bot.js"></script>
+  <script src="js/session.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

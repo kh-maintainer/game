@@ -1,0 +1,20 @@
+<!DOCTYPE html><html><head><title>starting</title></head><body><pre id="out">running</pre>
+<script src="../js/util.js"></script><script src="../js/data.js"></script><script src="../js/audio.js"></script><script src="../js/music.js"></script>
+<script>
+const errs = [];
+window.onerror = (m, s, l) => { errs.push(m + ' @' + l); };
+const report = (s) => { document.title = s; document.getElementById('out').textContent = s; };
+try {
+  Snd.init();
+  const names = ['hit', 'wall', 'post', 'bounce', 'cwall', 'bump', 'hop', 'land', 'pad', 'boost', 'goal', 'beep', 'go', 'whistle', 'ui', 'hover', 'emote', 'save', 'ooh', 'overtime'];
+  for (const n of names) Snd.play(n, { x: 300, s: 600, big: true });
+  Snd.updateEngines([{ x: 100, vx: 200, vy: 0, throttle: 1, boosting: true }, { x: 900, vx: 50, vy: 10, throttle: 0, boosting: false, quiet: true }], 0.016);
+  const ids = Object.keys(TRACKS);
+  let k = 0;
+  const next = () => {
+    if (k < ids.length) { Music.play(ids[k++]); setTimeout(next, 1500); }
+    else { for (const j of Object.keys(JINGLES)) Music.jingle(j); setTimeout(() => report(`state=${Snd.ctx.state} tracks=${ids.length} step=${Music.song && Music.song.step} errors=${errs.length} ${errs.join(' | ')} DONE`), 1500); }
+  };
+  next();
+} catch (e) { report('EXC ' + e.stack + ' DONE'); }
+</script></body></html>

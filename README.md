@@ -41,6 +41,8 @@ Each player is a little engineer in a hard hat (gold for the host, cyan for the 
 
 **Play online:** https://kh-maintainer.github.io/game/ (GitHub Pages)
 
+> **Also in this repo: [Turboball](turboball/)**, a 1v1 rocket-car soccer game you can play online with a friend: https://kh-maintainer.github.io/game/turboball/
+
 
 Open `index.html` in a browser, or serve the folder:
 

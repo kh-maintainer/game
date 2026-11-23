@@ -1,0 +1,80 @@
+<!DOCTYPE html><html><body><pre id="out">running</pre>
+<script src="../js/util.js"></script><script src="../js/data.js"></script><script src="../js/physics.js"></script>
+<script src="../js/sim.js"></script><script src="../js/bot.js"></script><script src="../js/session.js"></script><script src="../js/music.js"></script>
+<script>
+// Headless tests: open in a browser, or `chrome --headless --dump-dom test.html`.
+const log = [];
+const check = (name, cond, extra = '') => log.push((cond ? 'PASS ' : 'FAIL ') + name + ' ' + extra);
+const players = [{ name: 'A', paint: 0, body: 0 }, { name: 'B', paint: 1, body: 1 }];
+try {
+  // 1. Bot vs bot matches on every arena: goals happen, nothing escapes the arena.
+  for (const ar of ARENAS) {
+    for (const lv of [[2, 2], [1, 0]]) {
+      const m = new Match({ arena: ar.id, length: 180, players, seed: 42 });
+      const bots = [new Bot(0, lv[0], 1), new Bot(1, lv[1], 2)];
+      let escaped = 0, ticks = 0, hits = 0, maxBallZ = 0;
+      while (m.phase !== "over" && ticks < 60 * 900) {
+        m.step(TICK, [bots[0].input(m), bots[1].input(m)]);
+        for (const e of m.events) if (e.k === 'hit') hits++;
+        m.events.length = 0;
+        ticks++;
+        const b = m.ball;
+        maxBallZ = Math.max(maxBallZ, b.z);
+        if (b.x < FIELD.l - FIELD.depth - 2 || b.x > FIELD.r + FIELD.depth + 2 || b.y < FIELD.t - 2 || b.y > FIELD.b + 2) escaped++;
+        for (const c of m.cars) if (c.x < FIELD.l - FIELD.depth || c.x > FIELD.r + FIELD.depth || c.y < FIELD.t - 1 || c.y > FIELD.b + 1) escaped++;
+      }
+      const goals = m.score[0] + m.score[1];
+      check(`${ar.id} L${lv} finishes`, m.phase === 'over', `score=${m.score} ot=${m.overtime} t=${(ticks / 60).toFixed(0)}s hits=${hits} z=${maxBallZ.toFixed(0)} saves=${m.stats[0].saves}/${m.stats[1].saves} shots=${m.stats[0].shots}/${m.stats[1].shots}`);
+      check(`${ar.id} L${lv} goals scored`, goals >= 2, 'goals=' + goals);
+      check(`${ar.id} L${lv} nothing escapes`, escaped === 0, 'escaped=' + escaped);
+    }
+  }
+
+  // 0. Music: every melody fills its chord progression exactly; jingles parse.
+  for (const [id, t] of Object.entries(TRACKS)) { const c = compileTrack(t); check(`track ${id} melody length`, c.melLen === c.steps, `mel=${c.melLen} steps=${c.steps}`); check(`track ${id} notes parse`, c.mel.every((e) => !e || e.m != null)); }
+  for (const [id, j] of Object.entries(JINGLES)) { const p = parseMel(j.mel); check(`jingle ${id} parses`, p.ev.every((e) => !e || e.m != null)); }
+
+  // 2. Legend should beat Rookie over several matches.
+  let lw = 0, rw = 0;
+  for (let s = 0; s < 6; s++) {
+    const m = new Match({ arena: 'park', length: 120, players, seed: s + 100 });
+    const bots = [new Bot(0, 2, s), new Bot(1, 0, s + 9)];
+    let t = 0;
+    while (m.phase !== 'over' && t++ < 60 * 300) { m.step(TICK, [bots[0].input(m), bots[1].input(m)]); m.events.length = 0; }
+    lw += m.score[0]; rw += m.score[1];
+  }
+  check('legend beats rookie', lw > rw * 1.5, `legend=${lw} rookie=${rw}`);
+
+  // 3. Online: host + guest over a fake link with latency; guest car is driven by a bot.
+  function linkPair(delay) {
+    const q = [];
+    let now = 0;
+    const mk = (other) => ({ onMessage: null, send(m) { q.push({ at: now + delay, to: other(), m: JSON.parse(JSON.stringify(m)) }); } });
+    let A, B;
+    A = mk(() => B); B = mk(() => A);
+    return { A, B, pump(t) { now = t; for (let i = 0; i < q.length; i++) if (q[i].at <= now) { const it = q.splice(i--, 1)[0]; it.to.onMessage && it.to.onMessage(it.m); } } };
+  }
+  const L = linkPair(0.05);
+  let goalsSeenGuest = 0, guestErr = null;
+  const host = new HostSession({ mode: 'online', arena: 'neon', length: 90, players, link: L.A, seed: 5 });
+  const guest = new GuestSession({ start: { arena: 'neon', length: 90, players }, link: L.B, hooks: { fx: (e) => { if (e.k === 'goal') goalsSeenGuest++; } } });
+  const hb = new Bot(0, 2, 3), gb = new Bot(1, 2, 4);
+  let T = 0, maxBallErr = 0, samples = 0, errSum = 0;
+  for (let f = 0; f < 60 * 300 && host.match.phase !== 'over'; f++) {
+    T += 1 / 60; L.pump(T);
+    host.update(1 / 60, [hb.input(host.match), null]);
+    // the guest bot sees the guest's own view
+    const gv = { cars: [guest.other, guest.me], ball: guest.ball, ballLive: guest.ballLive, phase: guest.phase, time: guest.time, ar: guest.ar, pads: guest.pads };
+    guest.update(1 / 60, [gb.input(gv)]);
+    if (host.match.phase === 'play' && guest.phase === 'play') {
+      const e = Math.hypot(host.match.ball.x - guest.ball.x, host.match.ball.y - guest.ball.y);
+      maxBallErr = Math.max(maxBallErr, e); errSum += e; samples++;
+    }
+  }
+  check('online match finishes', host.match.phase === 'over', `score=${host.match.score} guestScore=${guest.score}`);
+  check('guest saw the goals', goalsSeenGuest === host.match.score[0] + host.match.score[1], `seen=${goalsSeenGuest}`);
+  check('guest car touched ball on host', host.match.stats[1].touches > 5, 'touches=' + host.match.stats[1].touches);
+  check('guest ball tracks host', errSum / samples < 25, `avg=${(errSum / samples).toFixed(1)} max=${maxBallErr.toFixed(0)}`);
+} catch (e) { log.push('ERROR ' + e.stack); }
+document.getElementById('out').textContent = log.join('\n') + '\nDONE';
+</script></body></html>
