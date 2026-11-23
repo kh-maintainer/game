@@ -39,6 +39,9 @@ Each player is a little engineer in a hard hat (gold for the host, cyan for the 
 
 ## Play
 
+**Play online:** https://kh-maintainer.github.io/game/ (GitHub Pages)
+
+
 Open `index.html` in a browser, or serve the folder:
 
 ```sh
