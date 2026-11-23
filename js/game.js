@@ -228,6 +228,7 @@ function freshMeta() {
     lifetimeEarned: 0,
     launches: 0,
     life: { sold: {}, crafted: {}, itemsSold: 0, playTime: 0 },
+    storySeen: {},
   };
 }
 
@@ -255,6 +256,8 @@ class Game {
     this.stats = { sold: {}, crafted: {}, playTime: 0 };
     this.goalIdx = 0;
     this.runLaunches = 0;
+    this.contract = null;
+    this.contractTimer = 30;
     this.earnBuckets = new Array(10).fill(0);
     this.bucketTimer = 0;
     this.checkTimer = 0;
@@ -541,6 +544,11 @@ class Game {
     this.meta.life.sold[item] = (this.meta.life.sold[item] || 0) + 1;
     this.meta.life.itemsSold++;
     this.sellCount++;
+    const ct = this.contract;
+    if (ct && item === ct.item) {
+      ct.got++;
+      if (ct.got >= ct.qty && !this.isGuest) this.finishContract(true);
+    }
     return v;
   }
 
@@ -606,6 +614,7 @@ class Game {
     this.meta.prestiges++;
     this.newRun(seed);
     this.events.push({ type: 'prestige', n });
+    this.storyEvent('prestige');
     return true;
   }
 
@@ -615,6 +624,54 @@ class Game {
     this.meta.patents += 5;
     this.meta.patentsTotal += 5;
     this.events.push({ type: 'launch' });
+    this.storyEvent('launch');
+    this.dirty = true;
+  }
+
+  // ------------------------------- story -----------------------------------
+  storyEvent(key) {
+    if (this.isGuest || !STORY[key] || this.meta.storySeen[key]) return;
+    this.meta.storySeen[key] = 1;
+    this.events.push({ type: 'story', key });
+  }
+
+  // ----------------------------- contracts ---------------------------------
+  updateContract(dt) {
+    if (this.goalIdx <= CONTRACT.firstAfterGoal) return;
+    if (this.contract) {
+      this.contract.t -= dt;
+      if (this.contract.t <= 0) this.finishContract(false);
+      return;
+    }
+    this.contractTimer -= dt;
+    if (this.contractTimer <= 0) this.newContract();
+  }
+
+  newContract() {
+    // ask for something the factory already makes, favouring the fancier goods
+    const made = Object.keys(this.stats.sold).filter((id) => this.stats.sold[id] >= 5);
+    if (!made.length) { this.contractTimer = 20; return; }
+    made.sort((a, b) => ITEMS[b].value - ITEMS[a].value);
+    const pool = made.slice(0, 3);
+    const item = pool[(Math.random() * pool.length) | 0];
+    const dur = CONTRACT.duration[0] + Math.random() * (CONTRACT.duration[1] - CONTRACT.duration[0]);
+    const rate = this.stats.sold[item] / Math.max(60, this.stats.playTime); // items/s this run
+    const qty = Math.max(5, Math.min(50000, Math.round((rate * dur * 0.8) / 5) * 5));
+    const reward = Math.ceil(qty * ITEMS[item].value * this.sellMult() * CONTRACT.premium);
+    this.contract = { item, qty, got: 0, t: dur, total: dur, reward };
+    this.events.push({ type: 'contract', state: 'new', item, qty, reward });
+  }
+
+  finishContract(ok) {
+    const c = this.contract;
+    if (!c) return;
+    this.contract = null;
+    this.contractTimer = CONTRACT.gap[0] + Math.random() * (CONTRACT.gap[1] - CONTRACT.gap[0]);
+    if (ok) {
+      this.earn(c.reward);
+      this.meta.life.contracts = (this.meta.life.contracts || 0) + 1;
+    }
+    this.events.push({ type: 'contract', state: ok ? 'done' : 'fail', item: c.item, qty: c.qty, reward: c.reward });
     this.dirty = true;
   }
 
@@ -637,9 +694,11 @@ class Game {
     if (goal && goal.check(this)) {
       this.money += goal.reward;
       this.goalIdx++;
-      this.events.push({ type: 'goal', text: goal.text, reward: goal.reward });
+      this.events.push({ type: 'goal', text: goal.text, reward: goal.reward, idx: this.goalIdx });
+      this.storyEvent('g' + (this.goalIdx - 1));
       this.dirty = true;
     }
+    if (this.meta.prestiges === 0 && this.claimablePatents() >= 2) this.storyEvent('patent');
   }
 
   // ----------------------------- simulation --------------------------------
@@ -723,7 +782,7 @@ class Game {
     this.checkTimer += dt;
     if (this.checkTimer >= 0.5) {
       this.checkTimer = 0;
-      if (!this.isGuest) this.checkProgress();
+      if (!this.isGuest) { this.checkProgress(); this.updateContract(0.5); }
     }
 
     for (let i = this.floaters.length - 1; i >= 0; i--) {
@@ -750,6 +809,8 @@ class Game {
       stats: this.stats,
       goalIdx: this.goalIdx,
       runLaunches: this.runLaunches,
+      contract: this.contract,
+      contractTimer: this.contractTimer,
       incomeRate: this.incomeRate,
       earnBuckets: this.earnBuckets,
       cleared: [...this.cleared],
@@ -784,6 +845,9 @@ class Game {
     this.stats = Object.assign({ sold: {}, crafted: {}, playTime: 0 }, JSON.parse(JSON.stringify(data.stats || {})));
     this.goalIdx = data.goalIdx || 0;
     this.runLaunches = data.runLaunches || 0;
+    this.contract = data.contract ? Object.assign({}, data.contract) : null;
+    this.contractTimer = data.contractTimer ?? 30;
+    this.meta.storySeen = this.meta.storySeen || {};
     this.incomeRate = data.incomeRate || 0;
     if (Array.isArray(data.earnBuckets) && data.earnBuckets.length === 10) this.earnBuckets = data.earnBuckets.slice();
     for (const o of data.buildings || []) {

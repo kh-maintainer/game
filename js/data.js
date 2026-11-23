@@ -8,7 +8,7 @@ const TILE = 16;
 const MAP_W = 112;
 const MAP_H = 112;
 const TICK = 1 / 20;
-const START_MONEY = 250;
+const START_MONEY = 400;
 const SAVE_KEY = 'pixelfoundry_save_v1';
 const SETTINGS_KEY = 'pixelfoundry_settings';
 const OFFLINE_CAP_SECONDS = 8 * 3600;
@@ -33,19 +33,19 @@ const ITEMS = {
   iron_ore:     { name: 'Iron Ore',     value: 1 },
   copper_ore:   { name: 'Copper Ore',   value: 1 },
   stone:        { name: 'Stone',        value: 0.6 },
-  coal:         { name: 'Coal',         value: 1.5 },
-  gold_ore:     { name: 'Gold Ore',     value: 3 },
+  coal:         { name: 'Coal',         value: 1 },
+  gold_ore:     { name: 'Gold Ore',     value: 1.5 },
   iron_plate:   { name: 'Iron Plate',   value: 4 },
   copper_plate: { name: 'Copper Plate', value: 4 },
   brick:        { name: 'Brick',        value: 3.5 },
-  gold_bar:     { name: 'Gold Bar',     value: 14 },
+  gold_bar:     { name: 'Gold Bar',     value: 10 },
   gear:         { name: 'Gear',         value: 11 },
   wire:         { name: 'Copper Wire',  value: 3 },
   circuit:      { name: 'Circuit',      value: 32 },
   steel:        { name: 'Steel Beam',   value: 24 },
   motor:        { name: 'Motor',        value: 160 },
-  processor:    { name: 'Processor',    value: 130 },
-  robot:        { name: 'Robot',        value: 1100 },
+  processor:    { name: 'Processor',    value: 150 },
+  robot:        { name: 'Robot',        value: 1300 },
 };
 
 // b = building that crafts it, in/out = item counts, time = seconds at 1x speed
@@ -74,7 +74,7 @@ const BUILDINGS = {
   chest:     { name: 'Chest',      cost: 80,   growth: 1.08, dir: true,  key: '8', desc: `Buffers up to ${CHEST_CAP} items and releases them out the front.`, unlock: 'logistics' },
   tunnel:    { name: 'Tunnel',     cost: 40,   growth: 1.05, dir: true,  key: '9', desc: `Place an entrance, then an exit up to ${TUNNEL_RANGE} tiles ahead. Items travel underground.`, unlock: 'logistics' },
   sorter:    { name: 'Sorter',     cost: 120,  growth: 1.06, dir: true,  key: '0', desc: 'Filtered item goes straight on, everything else goes left / right. Click to set the filter.', unlock: 'logistics' },
-  launchpad: { name: 'Launch Pad', cost: 5e6,  growth: 2.0,  dir: false, key: 'P', desc: `Feed it ${LAUNCH_REQ} Robots to launch the Orbital Foundry.`, unlock: 'spaceflight' },
+  launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 2.0,  dir: false, key: 'P', desc: `Feed it ${LAUNCH_REQ} Robots to launch the Orbital Foundry.`, unlock: 'spaceflight' },
 };
 const BUILD_ORDER = ['belt', 'miner', 'smelter', 'seller', 'splitter', 'assembler', 'foundry', 'chest', 'tunnel', 'sorter', 'launchpad'];
 const CRAFTERS = { smelter: 'iron_plate', assembler: 'gear', foundry: 'steel' };
@@ -82,24 +82,24 @@ const CRAFTERS = { smelter: 'iron_plate', assembler: 'gear', foundry: 'steel' };
 const FRONT_OUTPUT = { belt: 1, miner: 1, smelter: 1, assembler: 1, foundry: 1, chest: 1, splitter: 1, sorter: 1 };
 
 const UPGRADES = {
-  miner_speed: { name: 'Drill Bits',      desc: 'Miners +25% speed',             base: 150, growth: 2.1, max: 30, icon: 'miner' },
-  belt_speed:  { name: 'Greased Rollers', desc: 'Conveyors & tunnels +20% speed', base: 120, growth: 2.0, max: 25, icon: 'belt' },
-  craft_speed: { name: 'Hotter Furnaces', desc: 'Crafting +20% speed',           base: 250, growth: 2.1, max: 30, icon: 'smelter' },
+  miner_speed: { name: 'Drill Bits',      desc: 'Miners +25% speed',             base: 150, growth: 2.1, max: 10, icon: 'miner' },
+  belt_speed:  { name: 'Greased Rollers', desc: 'Conveyors & tunnels +20% speed', base: 120, growth: 2.0, max: 15, icon: 'belt' },
+  craft_speed: { name: 'Hotter Furnaces', desc: 'Crafting +20% speed',           base: 250, growth: 2.1, max: 18, icon: 'smelter' },
   sell_value:  { name: 'Trade Contacts',  desc: 'Sell value +15%',               base: 300, growth: 2.3, max: 60, icon: 'seller' },
   lucky:       { name: 'Lucky Strikes',   desc: '+4% chance a miner yields double', base: 2000, growth: 2.6, max: 20, icon: 'miner' },
 };
 
 const RESEARCH = {
   splitter:    { name: 'Splitters',   cost: 300,   req: [],                          desc: 'Unlocks the Splitter.' },
-  assembly:    { name: 'Assembly',    cost: 1500,  req: [],                          desc: 'Unlocks the Assembler and the Gear recipe.' },
-  logistics:   { name: 'Logistics',   cost: 4000,  req: ['splitter'],                desc: 'Unlocks Chests, Tunnels and Sorters.' },
-  electronics: { name: 'Electronics', cost: 8000,  req: ['assembly'],                desc: 'Copper Wire and Circuit recipes.' },
-  metallurgy:  { name: 'Metallurgy',  cost: 20000, req: ['assembly'],                desc: 'Unlocks the Foundry and Steel Beams.' },
-  motors:      { name: 'Motors',      cost: 1e5,   req: ['electronics', 'metallurgy'], desc: 'Motor recipe: gears + steel + circuit.' },
-  goldworking: { name: 'Goldworking', cost: 3e5,   req: ['electronics'],             desc: 'Smelters can turn gold ore into gold bars. Gold lies far from the centre.' },
-  processors:  { name: 'Processors',  cost: 1.5e6, req: ['goldworking'],             desc: 'Processor recipe: circuits + gold bar.' },
-  robotics:    { name: 'Robotics',    cost: 1e7,   req: ['processors', 'motors'],    desc: 'Robot recipe: motor + processors + steel.' },
-  spaceflight: { name: 'Spaceflight', cost: 6e7,   req: ['robotics'],                desc: 'Unlocks the Launch Pad. Launch the Orbital Foundry!' },
+  assembly:    { name: 'Assembly',    cost: 800,   req: [],                          desc: 'Unlocks the Assembler and the Gear recipe.' },
+  logistics:   { name: 'Logistics',   cost: 2500,  req: ['splitter'],                desc: 'Unlocks Chests, Tunnels and Sorters.' },
+  electronics: { name: 'Electronics', cost: 6000,  req: ['assembly'],                desc: 'Copper Wire and Circuit recipes.' },
+  metallurgy:  { name: 'Metallurgy',  cost: 15000, req: ['assembly'],                desc: 'Unlocks the Foundry and Steel Beams.' },
+  motors:      { name: 'Motors',      cost: 6e4,   req: ['electronics', 'metallurgy'], desc: 'Motor recipe: gears + steel + circuit.' },
+  goldworking: { name: 'Goldworking', cost: 2e5,   req: ['electronics'],             desc: 'Smelters can turn gold ore into gold bars. Gold lies far from the centre.' },
+  processors:  { name: 'Processors',  cost: 1e6,   req: ['goldworking'],             desc: 'Processor recipe: circuits + gold bar.' },
+  robotics:    { name: 'Robotics',    cost: 5e6,   req: ['processors', 'motors'],    desc: 'Robot recipe: motor + processors + steel.' },
+  spaceflight: { name: 'Spaceflight', cost: 2.5e7, req: ['robotics'],                desc: 'Unlocks the Launch Pad. Launch the Orbital Foundry!' },
 };
 
 // Permanent upgrades bought with Patents (prestige currency).
@@ -149,29 +149,100 @@ const ACHIEVEMENTS = [
 ];
 const ACH_BONUS = 0.02; // +2% income per achievement
 
-// Guided goal chain. Resets every run; rewards scale with the run's prestige count.
+// Guided goal chain (the story's spine). Resets every run.
+// prog(g) -> [current, target] drives the progress bar in the goal widget.
 const runSold = (g, id) => g.stats.sold[id] || 0;
+const sold = (id, n) => ({ check: (g) => runSold(g, id) >= n, prog: (g) => [Math.min(n, runSold(g, id)), n] });
+const flag = (fn) => ({ check: fn, prog: (g) => [fn(g) ? 1 : 0, 1] });
+const goalIncome = (n) => ({ check: (g) => g.incomeRate >= n, prog: (g) => [Math.min(n, g.incomeRate), n], money: true });
 const GOALS = [
-  { text: 'Place a Miner on the grey iron ore',          reward: 20,     check: (g) => g.buildings.some((b) => b.type === 'miner' && g.oreAt(b.x, b.y) === 'iron_ore') },
-  { text: 'Run conveyors to the Market and sell 10 iron ore', reward: 50, check: (g) => runSold(g, 'iron_ore') >= 10 },
-  { text: 'Build a Smelter in the line — sell 10 iron plates', reward: 100, check: (g) => runSold(g, 'iron_plate') >= 10 },
-  { text: 'Reach an income of $5/s',                      reward: 150,    check: (g) => g.incomeRate >= 5 },
-  { text: 'Buy an upgrade from the Upgrades tab',          reward: 150,    check: (g) => Object.keys(g.upgrades).length > 0 },
-  { text: 'Research Splitters',                           reward: 200,    check: (g) => g.hasResearch('splitter') },
-  { text: 'Expand your land',                             reward: 400,    check: (g) => g.land > g.startLand() },
-  { text: 'Research Assembly and sell 20 gears',          reward: 1000,   check: (g) => runSold(g, 'gear') >= 20 },
-  { text: 'Sell 20 bricks (smelt 2 stone each)',          reward: 1000,   check: (g) => runSold(g, 'brick') >= 20 },
-  { text: 'Research Logistics',                           reward: 1500,   check: (g) => g.hasResearch('logistics') },
-  { text: 'Sell 25 circuits',                             reward: 5000,   check: (g) => runSold(g, 'circuit') >= 25 },
-  { text: 'Sell 25 steel beams',                          reward: 10000,  check: (g) => runSold(g, 'steel') >= 25 },
-  { text: 'Reach an income of $1K/s',                     reward: 20000,  check: (g) => g.incomeRate >= 1000 },
-  { text: 'Sell 20 motors',                               reward: 50000,  check: (g) => runSold(g, 'motor') >= 20 },
-  { text: 'Sell 20 gold bars',                            reward: 1e5,    check: (g) => runSold(g, 'gold_bar') >= 20 },
-  { text: 'Sell 20 processors',                           reward: 5e5,    check: (g) => runSold(g, 'processor') >= 20 },
-  { text: 'Build 10 robots',                              reward: 3e6,    check: (g) => (g.stats.crafted.robot || 0) >= 10 },
-  { text: 'Research Spaceflight',                         reward: 1e7,    check: (g) => g.hasResearch('spaceflight') },
-  { text: `Launch the Orbital Foundry (${LAUNCH_REQ} robots)`, reward: 0, check: (g) => g.runLaunches > 0 },
+  { text: 'Place a Miner on the grey iron ore', reward: 20, ...flag((g) => g.buildings.some((b) => b.type === 'miner' && g.oreAt(b.x, b.y) === 'iron_ore')) },
+  { text: 'Lay conveyors into the Market and sell iron ore', reward: 50, ...sold('iron_ore', 10) },
+  { text: 'Put a Smelter in the line and sell iron plates', reward: 100, ...sold('iron_plate', 10) },
+  { text: 'Grow your income', reward: 150, ...goalIncome(5) },
+  { text: 'Buy an upgrade (Upgrades tab)', reward: 150, ...flag((g) => Object.keys(g.upgrades).length > 0) },
+  { text: 'Research Splitters', reward: 200, ...flag((g) => g.hasResearch('splitter')) },
+  { text: 'Buy more land (Upgrades tab)', reward: 400, ...flag((g) => g.land > g.startLand()) },
+  { text: 'Research Assembly and sell gears', reward: 1000, ...sold('gear', 20) },
+  { text: 'Smelt stone into bricks and sell them', reward: 1000, ...sold('brick', 20) },
+  { text: 'Research Logistics', reward: 1500, ...flag((g) => g.hasResearch('logistics')) },
+  { text: 'Sell circuits (Electronics research)', reward: 5000, ...sold('circuit', 25) },
+  { text: 'Sell steel beams (Metallurgy research)', reward: 10000, ...sold('steel', 25) },
+  { text: 'Grow your income', reward: 20000, ...goalIncome(1000) },
+  { text: 'Sell motors', reward: 50000, ...sold('motor', 20) },
+  { text: 'Find gold far from home and sell gold bars', reward: 1e5, ...sold('gold_bar', 20) },
+  { text: 'Sell processors', reward: 5e5, ...sold('processor', 20) },
+  { text: 'Build robots', reward: 3e6, check: (g) => (g.stats.crafted.robot || 0) >= 10, prog: (g) => [Math.min(10, g.stats.crafted.robot || 0), 10] },
+  { text: 'Research Spaceflight', reward: 1e7, ...flag((g) => g.hasResearch('spaceflight')) },
+  { text: 'Load a Launch Pad with robots and launch!', reward: 0, check: (g) => g.runLaunches > 0,
+    prog: (g) => [Math.max(0, ...g.buildings.filter((b) => b.type === 'launchpad').map((b) => b.count || 0)), LAUNCH_REQ] },
 ];
+
+// ------------------------------- story -------------------------------------
+const CHAPTERS = [
+  { from: 0,  title: 'The Inheritance' },
+  { from: 4,  title: 'Open for Business' },
+  { from: 9,  title: 'The Industrial Age' },
+  { from: 13, title: 'Gold Fever' },
+  { from: 16, title: 'Reach for the Stars' },
+];
+const chapterOf = (goalIdx) => { let c = 0; CHAPTERS.forEach((ch, i) => { if (goalIdx >= ch.from) c = i; }); return c; };
+
+const CHARACTERS = {
+  bolt:  { name: 'BOLT',      role: "Ada's robot assistant",      color: '#73eff7' },
+  marlo: { name: 'Marlo',     role: 'Trader',                      color: '#ffcd75' },
+  quill: { name: 'Dr. Quill', role: 'Astronomer (on the radio)',   color: '#c9a0ff' },
+  ada:   { name: 'Grandma Ada', role: 'A letter',                  color: '#ef7d57' },
+};
+
+// Lines play once per save (tracked in meta.storySeen). Keys: intro, g<N> (after goal N), launch, prestige, patent.
+const STORY = {
+  intro: [
+    ['bolt', 'BZZT! Oh! A visitor! …Wait. You have Ada\'s eyes. You must be her grandchild!'],
+    ['bolt', 'I am BOLT, her assistant. Model 7. Mostly rust. She left you this island — and her workshop.'],
+    ['ada', 'My dear, I spent my life dreaming of the Orbital Foundry: a factory among the stars. I ran out of time. You won\'t. Start small. — Ada'],
+    ['bolt', 'Start small! I can do small. See the grey rocks? Iron! Press 2 (Miner) and click on them.'],
+  ],
+  g0: [['bolt', 'Beautiful drilling! Now press 1 and drag Conveyors from the Miner\'s front into the Market in the middle.']],
+  g1: [
+    ['marlo', 'Well, well — fresh ore! Name\'s Marlo. I run the trading post here, and I\'ll buy anything you send into that Market.'],
+    ['marlo', 'Raw ore is cheap, though. Melt it into plates (Smelter, key 3) and I\'ll pay four times as much.'],
+  ],
+  g2: [['bolt', 'Plates! Ada would be proud. More miners and more smelters means more money. Let\'s grow!']],
+  g3: [['marlo', 'Now you\'re making real coin. Spend it! The Upgrades tab on the right makes everything faster.']],
+  g4: [
+    ['quill', '*krrsh* …this is Dr. Quill at the observatory. Ada\'s frequency is active again?! You must be continuing her work.'],
+    ['quill', 'I can help with research. Start with Splitters — you\'ll want to divide your belts.'],
+  ],
+  g5: [['bolt', 'See the golden fence? Ada owned far more land than that. Buy more in the Upgrades tab!']],
+  g6: [['quill', 'Assembly research gives you Assemblers. Gears are the heart of every machine — and of the Foundry.']],
+  g7: [['marlo', 'Gears sell like hot cakes! The mainland builders want bricks too: two stone each, straight from a Smelter.']],
+  g8: [['quill', 'Your factory sounds tangled from here. Logistics research brings Chests, Tunnels and Sorters.']],
+  g9: [['quill', 'Next, Electronics: copper wire, then circuits. Ada\'s notes say the Foundry\'s brain is made of them.']],
+  g10: [['bolt', 'Circuits! My cousins! …Ada also needed steel. Foundries fuse iron plates with coal.']],
+  g11: [['marlo', 'Steel beams! The mainland can\'t get enough. Hit a thousand a second and we\'ll talk big plans.']],
+  g12: [['quill', 'Motors are next: gears, steel and a circuit. A space station needs hundreds of them.']],
+  g13: [['bolt', 'Ada wrote: "gold glimmers far from home." Buy land toward the edges, then research Goldworking!']],
+  g14: [['quill', 'Gold makes the finest conductors. Processors need two circuits and a gold bar.']],
+  g15: [['quill', 'This is it — Robotics. Robots will assemble the Orbital Foundry up in orbit. Motors, processors, steel.']],
+  g16: [['bolt', 'Ten robots! They call me "grandpa". …I am deeply moved. BZZT.']],
+  g17: [['quill', 'Spaceflight unlocked! Build a Launch Pad (key P) and feed it robots. Ada\'s dream is one launch away.']],
+  launch: [
+    ['quill', 'Liftoff confirmed! The Orbital Foundry is in orbit. I… I can see it through my telescope!'],
+    ['ada', 'If you are reading this, you did it. I knew you would. The sky is full of islands — go find the next one. — Ada'],
+    ['marlo', 'Ha! I\'ll be selling souvenir rockets for years. Pleasure doing business, partner.'],
+  ],
+  patent: [['marlo', 'Investors keep asking about you. In the Patents tab you can hand this island on and start fresh with Ada\'s patents — every run gets faster.']],
+  prestige: [['bolt', 'A new island! Ada\'s patents come with us, so everything will be quicker this time. BZZT!']],
+};
+
+// Marlo's delivery contracts: short side-objectives that pay a premium.
+const CONTRACT = {
+  firstAfterGoal: 2,       // contracts start once you can make plates
+  gap: [40, 90],           // seconds between contracts
+  duration: [150, 300],    // seconds to complete
+  premium: 3,              // reward = qty * value * sellMult * premium
+};
 
 const BASE_BELT_SPEED = 1.6;  // tiles per second
 const BASE_MINER_RATE = 0.6;  // items per second

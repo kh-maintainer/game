@@ -195,7 +195,7 @@ const Net = {
         if (this.role === 'host') {
           const res = g.apply(d.a);
           if (res.ok) {
-            this.send({ t: 'act', a: d.a });
+            this.send({ t: 'act', a: d.a, by: 'guest' });
             ui.onRemoteAction(d.a, this.partner);
             if (d.a.type === 'prestige') this.sendSnapshot();
           } else {
@@ -203,6 +203,7 @@ const Net = {
           }
         } else if (this.role === 'guest') {
           g.apply(d.a);
+          if (d.by === 'host') ui.onRemoteAction(d.a, this.partner);
         }
         break;
       case 'nack':
@@ -248,12 +249,12 @@ const Net = {
         const err = g.placeError(a.b, a.x, a.y);
         if (err) return { ok: false, err };
       }
-      this.send({ t: 'act', a });
+      this.send({ t: 'act', a, by: 'host' });
       return { ok: true, pending: true };
     }
     const res = g.apply(a);
     if (res.ok && this.role === 'host') {
-      this.send({ t: 'act', a });
+      this.send({ t: 'act', a, by: 'host' });
       if (a.type === 'prestige') this.sendSnapshot();
     }
     return res;

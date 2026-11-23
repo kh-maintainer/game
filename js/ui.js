@@ -14,7 +14,7 @@ const el = (tag, cls, html) => {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const itemImg = (id) => `<img class="ico" src="${iconURL('item', id)}" alt="">`;
 const bldImg = (id) => `<img class="ico" src="${iconURL('bld', id)}" alt="">`;
-const FORWARD_EVENTS = { ach: 1, goal: 1, launch: 1 };
+const FORWARD_EVENTS = { ach: 1, goal: 1, launch: 1, story: 1, contract: 1 };
 const MINI_COLORS = {
   belt: '#8a8a98', miner: '#f2c94c', smelter: '#ff8a2a', seller: '#7be38f', splitter: '#e0c040', assembler: '#7898bb',
   foundry: '#c0573a', chest: '#b07a40', tunnel: '#5a5a66', sorter: '#b07ae0', launchpad: '#ffffff',
@@ -47,6 +47,8 @@ class UI {
     this.bindChat();
     this.bindMinimap();
     this.renderNet();
+    this.r.boltQuip = () => this.boltQuip();
+    $('#goal').onclick = () => { Sound.play('click'); this.showJournal(); };
   }
 
   get game() { return this.app.game; }
@@ -252,10 +254,113 @@ class UI {
     const box = $('#goal');
     const goal = GOALS[g.goalIdx];
     if (!goal) {
-      box.innerHTML = `<div class="gtitle">ALL GOALS COMPLETE</div><div>Sell the company in the <b>Patents</b> tab to go even bigger.</div>`;
+      box.innerHTML = `<div class="gtitle">EPILOGUE · THE NEXT ISLAND</div><div>The Orbital Foundry flies! Launch again for more patents, or move to a new island in the <b>Patents</b> tab.</div>`;
       return;
     }
-    box.innerHTML = `<div class="gtitle">GOAL ${g.goalIdx + 1}/${GOALS.length}${goal.reward ? ` · <span class="gold">+$${fmt(goal.reward)}</span>` : ''}</div><div>${goal.text}</div>`;
+    const ch = chapterOf(g.goalIdx);
+    const [cur, tgt] = goal.prog(g);
+    const pct = Math.max(0, Math.min(100, (cur / tgt) * 100));
+    const label = tgt > 1 ? `${goal.money ? '$' : ''}${fmt(cur)} / ${goal.money ? '$' : ''}${fmt(tgt)}${goal.money ? '/s' : ''}` : '';
+    box.innerHTML = `<div class="gtitle">CHAPTER ${ch + 1} · ${CHAPTERS[ch].title.toUpperCase()}</div>
+      <div class="gtext">${goal.text}</div>
+      <div class="gbar"><div style="width:${pct}%"></div><span>${label}</span></div>
+      <div class="gfoot">${goal.reward ? `Reward <b class="gold">$${fmt(goal.reward)}</b>` : 'Final goal'} <span class="muted">· click for journal</span></div>`;
+  }
+
+  renderContract() {
+    const box = $('#contract');
+    const c = this.game.contract;
+    if (!c) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const pct = Math.min(100, (c.got / c.qty) * 100);
+    const urgent = c.t < 30;
+    box.innerHTML = `<img class="cport" src="${iconURL('portrait', 'marlo')}" alt="">
+      <div class="cbody"><div class="gtitle">MARLO'S ORDER · <span class="${urgent ? 'warn' : ''}">${fmtTime(Math.max(0, c.t))}</span></div>
+      <div>Deliver ${fmt(c.qty)} × ${itemImg(c.item)} ${ITEMS[c.item].name}</div>
+      <div class="gbar"><div style="width:${pct}%"></div><span>${fmt(c.got)} / ${fmt(c.qty)}</span></div>
+      <div class="gfoot">Pays <b class="gold">$${fmt(c.reward)}</b> <span class="muted">(${CONTRACT.premium}× market price)</span></div></div>`;
+  }
+
+  // ------------------------------ dialogue ---------------------------------
+  queueStory(key) {
+    const lines = STORY[key];
+    if (!lines) return;
+    this.dialogQ = (this.dialogQ || []).concat(lines.map(([who, text]) => ({ who, text })));
+    if (!this.dialog) this.nextLine();
+  }
+
+  nextLine() {
+    const box = $('#dialog');
+    const line = (this.dialogQ || []).shift();
+    if (!line) { this.dialog = null; box.classList.add('hidden'); return; }
+    const ch = CHARACTERS[line.who];
+    this.dialog = { line, shown: 0, done: false };
+    box.classList.remove('hidden');
+    box.classList.toggle('letter', line.who === 'ada');
+    box.innerHTML = `<img class="dport" src="${iconURL('portrait', line.who)}" alt="">
+      <div class="dbody"><div class="dname" style="color:${ch.color}">${ch.name} <span class="muted">· ${ch.role}</span></div>
+      <div class="dtext"></div><div class="dhint">click or E ▶${this.dialogQ.length ? ` <span class="muted">(${this.dialogQ.length} more)</span>` : ''}</div></div>
+      <button class="dskip" title="Skip">✕</button>`;
+    box.querySelector('.dskip').onclick = (e) => { e.stopPropagation(); this.dialogQ = []; this.nextLine(); };
+    box.onclick = () => this.advanceDialog();
+  }
+
+  advanceDialog() {
+    const d = this.dialog;
+    if (!d) return;
+    if (!d.done) { d.shown = d.line.text.length; return; }
+    Sound.play('click');
+    this.nextLine();
+  }
+
+  tickDialog(dt) {
+    const d = this.dialog;
+    if (!d || d.done) return;
+    const before = Math.floor(d.shown);
+    d.shown = Math.min(d.line.text.length, d.shown + dt * 55);
+    const n = Math.floor(d.shown);
+    if (n !== before && n % 3 === 0) Sound.play('blip', { f: { bolt: 900, marlo: 380, quill: 620, ada: 520 }[d.line.who] });
+    const el2 = $('#dialog .dtext');
+    if (el2) el2.textContent = d.line.text.slice(0, n);
+    if (n >= d.line.text.length) d.done = true;
+  }
+
+  chapterBanner(idx) {
+    const ch = CHAPTERS[idx];
+    const b = el('div', 'chapter', `<div class="cnum">CHAPTER ${idx + 1}</div><div class="ctitle2">${ch.title}</div>`);
+    document.body.appendChild(b);
+    Sound.play('goal');
+    setTimeout(() => b.classList.add('out'), 3200);
+    setTimeout(() => b.remove(), 4000);
+  }
+
+  showJournal() {
+    const g = this.game;
+    const keys = ['intro', ...GOALS.map((_, i) => 'g' + i), 'patent', 'launch', 'prestige'];
+    const parts = [];
+    for (const k of keys) {
+      if (!g.meta.storySeen[k]) continue;
+      for (const [who, text] of STORY[k] || []) {
+        parts.push(`<div class="jline"><img src="${iconURL('portrait', who)}" alt=""><div><b style="color:${CHARACTERS[who].color}">${CHARACTERS[who].name}</b><div>${esc(text)}</div></div></div>`);
+      }
+    }
+    const chapters = CHAPTERS.map((c, i) => `<span class="${chapterOf(g.goalIdx) >= i ? 'good' : 'muted'}">${i + 1}. ${c.title}</span>`).join(' · ');
+    this.modal(`<h2>Journal</h2><div class="small">${chapters}</div><div class="journal">${parts.join('') || '<p class="muted">Nothing yet.</p>'}</div>
+      <div class="mbtns"><button id="m-ok">Close</button></div>`, true);
+    $('#m-ok').onclick = () => this.closeModal();
+  }
+
+  boltQuip() {
+    const g = this.game;
+    const blocked = g.buildings.filter((b) => (b.type === 'miner' && b.out > 0 && !b.working) || (b.outQ && b.outQ.length)).length;
+    const cheapest = Math.min(...Object.keys(UPGRADES).filter((id) => g.lvl(id) < UPGRADES[id].max).map((id) => g.upgradeCost(id)));
+    const opts = [];
+    if (blocked >= 3) opts.push(`${blocked} machines are backed up!`, 'Something is jammed. Check belts!');
+    if (g.money > cheapest * 1.5) opts.push('We can afford an upgrade!', 'Money burning a hole, boss.');
+    if (g.contract && g.contract.t < 45 && g.contract.got < g.contract.qty) opts.push("Marlo's order is due soon!");
+    if (this.r.nightLevel > 0.5) opts.push('Lanterns on. Spooky!', 'Fireflies! My favourite bugs.');
+    opts.push('BZZT!', 'Ada would love this.', 'Beep boop. That means "nice".', 'More belts. Always more belts.', 'I counted 3 butterflies today.');
+    return opts[(Math.random() * opts.length) | 0];
   }
 
   // ----------------------------- inspector ---------------------------------
@@ -473,6 +578,7 @@ class UI {
     const res = this.act({ type: 'place', b: tool, x: t.x, y: t.y, dir });
     if (res.ok) {
       Sound.play('place');
+      this.r.avatarAction('me', t.x, t.y);
       if (down) down.placed.add(t.x + ',' + t.y);
     }
   }
@@ -480,7 +586,7 @@ class UI {
   deleteAt(t) {
     if (!this.game.at(t.x, t.y)) return;
     if (this.input.selected && this.input.selected.x === t.x && this.input.selected.y === t.y) this.select(null);
-    if (this.act({ type: 'remove', x: t.x, y: t.y }).ok) { Sound.play('remove'); this.r.dust(t.x, t.y); }
+    if (this.act({ type: 'remove', x: t.x, y: t.y }).ok) { Sound.play('remove'); this.r.dust(t.x, t.y); this.r.avatarAction('me', t.x, t.y); }
   }
 
   ping(t) {
@@ -526,6 +632,8 @@ class UI {
       } else if (k === 'escape') {
         if (this.input.tool) this.selectTool(null);
         else this.select(null);
+      } else if (k === 'e') {
+        this.advanceDialog();
       } else if (k === 'g') {
         if (this.input.hover) this.ping(this.input.hover);
       } else if (k === 'enter') {
@@ -729,13 +837,16 @@ class UI {
     this.titleOpen = true;
     $('#modal').classList.add('title-mode');
     const start = () => Sound.unlock();
+    const beginStory = () => {
+      if (!this.game.meta.storySeen.intro) { this.chapterBanner(0); setTimeout(() => this.game.storyEvent('intro'), 900); }
+    };
     $('#t-play').onclick = () => {
       start();
       this.closeModal();
       if (this.app.pendingOffline) this.app.pendingOffline();
-      else if (!hasSave) this.showHelp();
+      beginStory();
     };
-    $('#t-coop').onclick = () => { start(); this.closeModal(); this.showCoop(); };
+    $('#t-coop').onclick = () => { start(); this.closeModal(); this.showCoop(); beginStory(); };
     $('#t-help').onclick = () => { start(); this.showHelp(true); };
   }
 
@@ -860,10 +971,24 @@ class UI {
         this.bigToast('🏆', `Achievement: ${a.name}`, `${a.desc} · +${ACH_BONUS * 100}% income`);
         break;
       }
-      case 'goal':
+      case 'goal': {
         Sound.play('goal');
         this.bigToast('✔', 'Goal complete!', `${e.text}${e.reward ? ` · +$${fmt(e.reward)}` : ''}`);
+        const ch = CHAPTERS.findIndex((c) => c.from === e.idx);
+        if (ch > 0) setTimeout(() => this.chapterBanner(ch), 1200);
         break;
+      }
+      case 'story':
+        this.queueStory(e.key);
+        break;
+      case 'contract': {
+        const what = `${fmt(e.qty)} ${ITEMS[e.item].name}`;
+        if (e.state === 'new') { Sound.play('chat'); this.toast(`📜 Marlo wants ${what} — pays $${fmt(e.reward)}`); }
+        else if (e.state === 'done') { Sound.play('buy'); this.bigToast('📜', 'Order delivered!', `${what} · +$${fmt(e.reward)}`); this.r.say('Marlo is thrilled!'); }
+        else this.toast(`Marlo's order for ${what} expired`, true);
+        this.renderContract();
+        break;
+      }
       case 'prestige':
         Sound.play('prestige');
         this.r.setGame(g);
@@ -888,6 +1013,8 @@ class UI {
   }
 
   onRemoteAction(a, partner) {
+    // the partner's character swings a hammer where they built
+    if ((a.type === 'place' || a.type === 'remove') && this.r.actors) this.r.avatarAction('partner', a.x, a.y);
     // light feedback when the partner does something notable
     if (a.type === 'research') this.toast(`${esc(partner ? partner.name : 'Partner')} researched ${RESEARCH[a.id].name}`);
     else if (a.type === 'land') this.toast(`${esc(partner ? partner.name : 'Partner')} bought more land`);
@@ -909,6 +1036,10 @@ class UI {
       this.lastSellCount = g.sellCount;
     }
 
+    this.input.myName = Net.myName;
+    this.input.myColor = Net.myColor();
+    this.input.myRole = Net.role;
+    this.tickDialog(dt);
     $('#money-val').textContent = '$' + fmt(g.money);
     $('#income').textContent = '+$' + fmt(g.incomeRate) + '/s';
     if (g.dirty) {
@@ -926,6 +1057,8 @@ class UI {
       this.refreshToolbar();
       this.refreshAffordability();
       this.updateInspectorState();
+      this.renderGoal();
+      this.renderContract();
       const claim = g.claimablePatents();
       $('#patents').innerHTML = `✦ ${fmt(g.meta.patents)}${claim ? ` <span class="good">(+${fmt(claim)})</span>` : ''}`;
       if (claim > 0) $('#patents').classList.remove('hidden');

@@ -43,6 +43,7 @@ class Renderer {
     this.birds = [];
     this.clouds = [];
     this.born = new Map();
+    this.actors = null;
     this.shake = 0;
     this.cleanT = 0;
     this.setGame(game);
@@ -63,6 +64,7 @@ class Renderer {
       this.clouds.push({ x: rng() * game.w, y: rng() * game.h, s: (rng() * SPR.clouds.length) | 0, scale: 2 + (rng() * 2 | 0) });
     }
     this.centerOn(game.center());
+    this.actors = null;
   }
 
   key(b) { return b.x + ',' + b.y + ',' + b.type; }
@@ -242,6 +244,7 @@ class Renderer {
     }
     this.shake = Math.max(0, this.shake - dt);
     if (this.view) this.updateAmbient(dt, this.view, this.nightLevel || 0);
+    if (this.actors) this.updateActors(dt);
     this.cleanT += dt;
     if (this.cleanT > 2) {
       this.cleanT = 0;
@@ -263,6 +266,9 @@ class Renderer {
     const s = this.scale();
     const day = input.dayNight === false ? { night: 0, golden: 0 } : dayState();
     this.nightLevel = day.night;
+    this.lastInput = input;
+    this.lastPartner = partner;
+    if (!this.actors) this.initActors();
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -435,6 +441,8 @@ class Renderer {
       }
     }
 
+    this.drawCharacters(input, partner);
+
     // rockets (overlap the tiles above their pad)
     for (const b of game.buildings) {
       if (b.type !== 'launchpad') continue;
@@ -522,6 +530,19 @@ class Renderer {
         L.fillStyle = gr;
         L.fillRect(sx - r, sy - r, r * 2, r * 2);
         glows.push([sx, sy, r, li]);
+      }
+      // the players carry lanterns
+      if (this.actors) {
+        const holders = [this.actors.me];
+        if (partner && this.actors.partner.seen) holders.push(this.actors.partner);
+        for (const a of holders) {
+          const [sx, sy] = toScreen(a.x, a.y - 0.4);
+          const r = 2.4 * TILE * s * flick;
+          const gr = L.createRadialGradient(sx, sy, 0, sx, sy, r);
+          gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+          L.fillStyle = gr; L.fillRect(sx - r, sy - r, r * 2, r * 2);
+          glows.push([sx, sy, r, { col: '255,205,117', glow: 0.18 }]);
+        }
       }
       // fireflies punch tiny holes too
       for (const c of this.critters) {
@@ -658,17 +679,146 @@ class Renderer {
     ctx.globalAlpha = 1;
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'center';
-    if (partner && partner.cursor) {
-      const pc = partner.cursor;
-      const sx = ox + (pc.x + 0.5) * TILE * s, sy = oy + (pc.y + 1) * TILE * s + 14 * this.dpr;
+    // name tags above the characters
+    const tag = (a, name, color) => {
+      const sx = ox + a.x * TILE * s, sy = oy + (a.y - 1.05) * TILE * s;
       ctx.font = `600 ${Math.round(12 * this.dpr)}px "Pixelify Sans", monospace`;
-      const w = ctx.measureText(partner.name).width + 12 * this.dpr;
+      const w = ctx.measureText(name).width + 12 * this.dpr;
       ctx.fillStyle = '#1a1c2c';
       ctx.fillRect(sx - w / 2, sy - 12 * this.dpr, w, 17 * this.dpr);
-      ctx.fillStyle = partner.color;
+      ctx.fillStyle = color;
       ctx.fillRect(sx - w / 2, sy - 12 * this.dpr, w, 2 * this.dpr);
-      ctx.fillText(partner.name, sx, sy + 1 * this.dpr);
+      ctx.fillText(name, sx, sy + 1 * this.dpr);
+    };
+    if (partner && this.actors.partner.seen) tag(this.actors.partner, partner.name, partner.color);
+    if (partner) tag(this.actors.me, input.myName || 'You', input.myColor || '#ffcd75');
+    // BOLT's speech bubble
+    const bolt = this.actors.bolt;
+    if (bolt.say && bolt.sayT > 0) {
+      ctx.font = `600 ${Math.round(12 * this.dpr)}px "Pixelify Sans", monospace`;
+      const sx = ox + bolt.x * TILE * s, sy = oy + (bolt.y - 0.9) * TILE * s;
+      const w = ctx.measureText(bolt.say).width + 14 * this.dpr, h = 20 * this.dpr;
+      ctx.globalAlpha = Math.min(1, bolt.sayT * 2);
+      ctx.fillStyle = '#1a1c2c';
+      ctx.fillRect(sx - w / 2 - 2 * this.dpr, sy - h - 2 * this.dpr, w + 4 * this.dpr, h + 4 * this.dpr);
+      ctx.fillStyle = '#f4f4f4';
+      ctx.fillRect(sx - w / 2, sy - h, w, h);
+      ctx.fillRect(sx - 3 * this.dpr, sy, 6 * this.dpr, 3 * this.dpr);
+      ctx.fillStyle = '#1a1c2c';
+      ctx.fillText(bolt.say, sx, sy - 6 * this.dpr);
+      ctx.globalAlpha = 1;
     }
+  }
+
+  // ------------------------------ characters --------------------------------
+  initActors() {
+    const c = this.game.center();
+    const mk = (x, y) => ({ x, y, tx: x, ty: y, facing: 0, walk: 0, moving: false, hammer: 0, flip: false, seen: false });
+    this.actors = {
+      me: mk(c.x + 0.5, c.y + 2),
+      partner: mk(c.x + 1.5, c.y + 2),
+      bolt: { x: c.x - 0.5, y: c.y + 1.5, t: 0, say: '', sayT: 0, quipT: 25 },
+    };
+  }
+
+  moveActor(a, dt) {
+    const dx = a.tx - a.x, dy = a.ty - a.y, d = Math.hypot(dx, dy);
+    const speed = Math.min(10, 2.5 + d * 2.2); // hurry when far, stroll when close
+    if (d > 0.08) {
+      const step = Math.min(d, speed * dt);
+      a.x += (dx / d) * step;
+      a.y += (dy / d) * step;
+      a.moving = true;
+      a.walk += dt * (6 + speed);
+      if (Math.abs(dx) > Math.abs(dy)) { a.facing = 2; a.flip = dx < 0; } else a.facing = dy < 0 ? 1 : 0;
+    } else a.moving = false;
+    a.hammer = Math.max(0, a.hammer - dt);
+  }
+
+  updateActors(dt) {
+    const A = this.actors, inp = this.lastInput, partner = this.lastPartner;
+    if (inp && inp.hover && this.game.inBounds(inp.hover.x, inp.hover.y)) {
+      // stand just below the tile you're pointing at, like you're working on it
+      A.me.tx = inp.hover.x + 0.5;
+      A.me.ty = inp.hover.y + 1.25;
+    }
+    this.moveActor(A.me, dt);
+    if (partner && partner.cursor) {
+      if (!A.partner.seen) { A.partner.x = partner.cursor.x + 0.5; A.partner.y = partner.cursor.y + 1.25; A.partner.seen = true; }
+      A.partner.tx = partner.cursor.x + 0.5;
+      A.partner.ty = partner.cursor.y + 1.25;
+      this.moveActor(A.partner, dt);
+    }
+    // BOLT hovers at your shoulder, lagging behind a little
+    const b = A.bolt;
+    b.t += dt;
+    const fx = A.me.x + (A.me.flip ? 0.9 : -0.9), fy = A.me.y - 0.9;
+    b.x += (fx - b.x) * Math.min(1, dt * 2.5);
+    b.y += (fy - b.y) * Math.min(1, dt * 2.5);
+    b.sayT = Math.max(0, b.sayT - dt);
+    b.quipT -= dt;
+    if (b.quipT <= 0 && this.boltQuip) {
+      b.quipT = 35 + Math.random() * 40;
+      this.say(this.boltQuip());
+    }
+  }
+
+  say(text) {
+    if (!text) return;
+    this.actors.bolt.say = text;
+    this.actors.bolt.sayT = 4;
+  }
+
+  avatarAction(who, x, y) {
+    const a = this.actors[who];
+    if (!a) return;
+    a.hammer = 0.3;
+    this.burst(x + 0.5, y + 0.6, 4, ['#ffcd75', '#f4f4f4'], 1.8, 0.35, 3);
+  }
+
+  drawActor(a, sheet) {
+    const ctx = this.ctx;
+    const frame = a.hammer > 0 ? 2 : a.moving ? (Math.floor(a.walk) % 2) : 0;
+    const facing = a.hammer > 0 ? 0 : a.facing;
+    const img = sheet[facing][frame];
+    const px = Math.round(a.x * TILE), py = Math.round(a.y * TILE);
+    ctx.fillStyle = 'rgba(16,20,40,0.3)';
+    ctx.fillRect(px - 4, py, 8, 2);
+    ctx.fillRect(px - 3, py + 2, 6, 1);
+    const bob = a.moving && Math.floor(a.walk) % 2 ? -1 : 0;
+    if (a.flip && facing === 2) {
+      ctx.save();
+      ctx.translate(px, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -8, py - 15 + bob);
+      ctx.restore();
+    } else ctx.drawImage(img, px - 8, py - 15 + bob);
+  }
+
+  drawCharacters(input, partner) {
+    const ctx = this.ctx, A = this.actors, t = performance.now() / 1000;
+    const g = this.game, c = g.center();
+    // Marlo minds the starting Market
+    const m = g.at(c.x, c.y);
+    if (m && m.type === 'seller') {
+      // stand on a free tile next to the stall (prefer front-right)
+      const spots = [[1, 1], [-1, 1], [1, -1], [-1, -1], [0, 1], [1, 0], [-1, 0], [0, -1]];
+      const sp = spots.find(([dx, dy]) => !g.at(c.x + dx, c.y + dy) && !g.isWater(c.x + dx, c.y + dy)) || [1, 1];
+      const mx = (c.x + sp[0] + 0.5) * TILE, my = (c.y + sp[1] + 0.85) * TILE;
+      ctx.fillStyle = 'rgba(16,20,40,0.3)';
+      ctx.fillRect(Math.round(mx) - 4, Math.round(my), 8, 2);
+      ctx.drawImage(SPR.marlo[m.flash > 0 || Math.floor(t * 0.5) % 7 === 0 ? 1 : 0], Math.round(mx) - 8, Math.round(my) - 15);
+    }
+    const mine = input.myRole === 'guest' ? SPR.avatar.guest : SPR.avatar.host;
+    const theirs = input.myRole === 'guest' ? SPR.avatar.host : SPR.avatar.guest;
+    if (partner && A.partner.seen) this.drawActor(A.partner, theirs);
+    this.drawActor(A.me, mine);
+    // BOLT
+    const b = A.bolt;
+    const by = b.y + Math.sin(b.t * 3) * 0.12;
+    ctx.fillStyle = 'rgba(16,20,40,0.22)';
+    ctx.fillRect(Math.round(b.x * TILE) - 3, Math.round((b.y + 0.9) * TILE), 6, 1);
+    ctx.drawImage(SPR.bolt[Math.floor(t * 10) % 2], Math.round(b.x * TILE) - 6, Math.round(by * TILE) - 7);
   }
 
   groundShadow(x, y, hw) {

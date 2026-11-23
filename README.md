@@ -7,6 +7,23 @@ Mine ore, run it along conveyors, smelt and assemble it into more valuable parts
 There are no assets or build step. All pixel art (one cohesive Sweetie 16-based palette), sound effects and music are generated in code. The world feels alive: swaying forests, shimmering ponds, drifting cloud shadows, birds, butterflies, and a day/night cycle where furnaces and lamps light up the dark, plus fireflies at night.
 
 
+
+## Story & objective
+
+You inherit Grandma Ada's overgrown island workshop and set out to finish her life's dream: the **Orbital Foundry**, a factory in space. The story plays out over **5 chapters** (The Inheritance → Open for Business → The Industrial Age → Gold Fever → Reach for the Stars), driven by 19 goals with progress bars and cash rewards. It ends when you launch the rocket.
+
+**Characters:**
+- **BOLT:** Ada's rusty robot assistant. He hovers beside you, gives tips, and comments on jams and spare cash.
+- **Marlo:** the trader who runs the Market. He stands by his stall and posts **delivery orders**: deliver X items before the timer runs out and he pays 3× the market price.
+- **Dr. Quill:** an astronomer who guides your research over the radio.
+- **Grandma Ada:** appears through her letters.
+
+Each player is a little engineer in a hard hat (gold for the host, cyan for the guest). Your engineer walks to wherever you point and swings a hammer when you build. Click the goal panel to reread the story in the **Journal**.
+
+## Balance
+
+`test/balance.html` runs a bot through the whole economy using the real numbers and prints when each milestone happens. Current pacing for a fast, near-optimal player: first patent ~27 min, $1K/s ~1h, robots ~1h35, first launch ~2h20. Expect roughly double that for a normal first playthrough; prestige makes later runs much faster.
+
 ## Screenshots
 
 | | |
@@ -15,8 +32,10 @@ There are no assets or build step. All pixel art (one cohesive Sweetie 16-based 
 | Title screen over the live world | A small factory by day |
 | ![Factory at night](docs/screenshots/3-night.png) | ![Co-op](docs/screenshots/4-coop.png) |
 | Night: furnaces and lamps light the dark | Co-op: partner cursor, chat, ping, research |
-| ![Golden hour](docs/screenshots/5-dusk.png) | |
-| Golden hour at dusk | |
+| ![Golden hour](docs/screenshots/5-dusk.png) | ![Story](docs/screenshots/6-story.png) |
+| Golden hour at dusk | Chapter 1: BOLT greets you, Marlo minds the Market |
+| ![Characters](docs/screenshots/7-characters.png) | |
+| Co-op engineers, BOLT tips, Dr. Quill on the radio, Marlo's order | |
 
 ## Play
 
@@ -90,7 +109,8 @@ js/render.js      canvas renderer: camera, land, curves, particles, partner curs
 js/net.js         online co-op over PeerJS (host-authoritative)
 js/ui.js          DOM UI, input, panels, modals, minimap, chat
 js/main.js        bootstrap and main loop
-test/sim.html     headless simulation tests (open in a browser; 22 checks)
+test/sim.html     headless simulation tests (open in a browser; 28 checks)
+test/balance.html pacing bot: simulates a full run and prints milestone times
 ```
 
 Every world change is a serialisable **action** (`Game.apply`). That one path is what lets solo play, the co-op host and the co-op guest share the same code.

@@ -1,0 +1,164 @@
+<!DOCTYPE html><html><body style="background:#111;color:#ddd;font:13px monospace"><pre id="out">running…</pre>
+<script src="../js/data.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Pacing simulator. A greedy "decent player" bot plays an abstract model of
+// the economy using the real numbers from data.js and reports when each
+// milestone happens. Not exact — it ignores layout time and belt limits —
+// but good for spotting walls, dead zones and runaway exponentials.
+// Open in a browser: test/balance.html  (add ?slow=2 to model a slower human)
+// ---------------------------------------------------------------------------
+const P = new URLSearchParams(location.search);
+const HUMAN = +(P.get('slow') || 1); // humans react/build slower: decisions per minute are throttled
+const ORES = { iron_ore: 1, copper_ore: 1, stone: 1, coal: 1, gold_ore: 1 };
+const BELTS_PER_BUILDING = 2.5;
+const LAND_DENSITY = 0.3; // fraction of owned tiles the factory can realistically use
+
+function run() {
+  const S = {
+    t: 0, money: START_MONEY, runEarned: 0, upgrades: {}, research: {}, land: 0,
+    counts: { belt: 0, miner: 0, smelter: 0, seller: 1, assembler: 0, foundry: 0, splitter: 0, chest: 0, tunnel: 0, sorter: 0, launchpad: 0 },
+    lines: {}, // product -> output items/s
+    goals: 0, robotsLaunched: 0,
+  };
+  const lvl = (id) => S.upgrades[id] || 0;
+  const minerRate = () => Math.min(20, BASE_MINER_RATE * Math.pow(1.25, lvl('miner_speed'))) * (1 + 0.04 * lvl('lucky'));
+  const craft = () => Math.pow(1.2, lvl('craft_speed'));
+  const sellMult = () => Math.pow(1.15, lvl('sell_value'));
+  const unlocked = (rid) => !RESEARCH_GATE[rid] || S.research[RESEARCH_GATE[rid]];
+  const income = () => Object.entries(S.lines).reduce((a, [p, r]) => a + r * ITEMS[p].value, 0) * sellMult();
+  const cost = (type, n = 1) => {
+    // continuous sum of base*g^(count+i) for i in [0,n)
+    const d = BUILDINGS[type], c = S.counts[type];
+    if (d.growth === 1) return d.cost * n;
+    const lg = Math.log(d.growth);
+    return d.cost * (Math.pow(d.growth, c + n) - Math.pow(d.growth, c)) / lg;
+  };
+  // buildings needed for 1 item/s of `item`
+  const need = (item, rate, acc) => {
+    if (ORES[item]) { acc.miner = (acc.miner || 0) + rate / minerRate(); return acc; }
+    const rid = Object.keys(RECIPES).find((k) => RECIPES[k].out[item]);
+    const r = RECIPES[rid];
+    const crafts = rate / r.out[item];
+    acc[r.b] = (acc[r.b] || 0) + crafts * r.time / craft();
+    for (const k in r.in) need(k, crafts * r.in[k], acc);
+    return acc;
+  };
+  const RESEARCH_GATE = {};
+  for (const id in RECIPES) if (RECIPES[id].unlock) RESEARCH_GATE[id] = RECIPES[id].unlock;
+  const productUnlocked = (p) => {
+    if (ORES[p]) return p !== 'gold_ore' || S.land >= 3;
+    const rid = Object.keys(RECIPES).find((k) => RECIPES[k].out[p]);
+    if (!unlocked(rid)) return false;
+    // needs gold?
+    const acc = need(p, 1, {});
+    const usesGold = JSON.stringify(RECIPES[rid]).includes('gold') || p === 'processor' || p === 'robot';
+    if (usesGold && S.land < 3) return false;
+    if (RECIPES[rid].b === 'foundry' || JSON.stringify(acc).includes('foundry')) if (!S.research.metallurgy) return false;
+    if (acc.assembler && !S.research.assembly) return false;
+    return true;
+  };
+  const totalBuildings = () => Object.values(S.counts).reduce((a, b) => a + b, 0);
+  const landCap = () => { const r = LAND_RADII[Math.min(S.land, LAND_RADII.length - 1)]; return (2 * r + 1) ** 2 * LAND_DENSITY; };
+
+  const log = [];
+  const mark = (what) => log.push([S.t, what, income()]);
+  const marked = {};
+  const once = (k, cond, what) => { if (!marked[k] && cond) { marked[k] = 1; mark(what); } };
+
+  // options -------------------------------------------------------------------
+  const options = () => {
+    const opts = [];
+    const inc = Math.max(0.01, income());
+    // expand a product line by one "chunk" (one final building at full speed)
+    for (const p in ITEMS) {
+      if (!productUnlocked(p)) continue;
+      const rate = ORES[p] ? minerRate() : (() => { const rid = Object.keys(RECIPES).find((k) => RECIPES[k].out[p]); const r = RECIPES[rid]; return r.out[p] / r.time * craft(); })();
+      const acc = need(p, rate, {});
+      let c = 0, nb = 0;
+      for (const b in acc) { c += cost(b, acc[b]); nb += acc[b]; }
+      c += cost('belt', nb * BELTS_PER_BUILDING);
+      nb += nb * BELTS_PER_BUILDING;
+      const gain = rate * ITEMS[p].value * sellMult();
+      opts.push({ kind: 'line', p, acc, nb, rate, cost: c, gain });
+    }
+    for (const id in UPGRADES) {
+      const u = UPGRADES[id];
+      if (lvl(id) >= u.max) continue;
+      const c = Math.ceil(u.base * Math.pow(u.growth, lvl(id)));
+      const eff = { sell_value: 0.15, miner_speed: 0.25 * 0.45, craft_speed: 0.2 * 0.45, belt_speed: 0.03, lucky: 0.04 * 0.45 }[id];
+      opts.push({ kind: 'upgrade', id, cost: c, gain: inc * eff });
+    }
+    return opts;
+  };
+
+  const nextResearch = () => Object.keys(RESEARCH).find((id) => !S.research[id] && RESEARCH[id].req.every((q) => S.research[q]));
+  let decideTimer = 0;
+  const DT = 1;
+  const LIMIT = 6 * 3600 * HUMAN;
+  while (S.t < LIMIT) {
+    const inc = income() + (S.t < 1 ? 0 : 0);
+    S.money += inc * DT;
+    S.runEarned += inc * DT;
+    S.t += DT;
+    decideTimer += DT;
+    // goal rewards roughly arrive as the run progresses
+    once('p1', S.runEarned >= PATENT_DIVISOR, 'first patent claimable');
+    once('p6', S.runEarned >= 36 * PATENT_DIVISOR, '6 patents claimable');
+    once('p20', S.runEarned >= 400 * PATENT_DIVISOR, '20 patents claimable');
+    once('i10', inc >= 10, 'income $10/s');
+    once('i1k', inc >= 1e3, 'income $1K/s');
+    once('i100k', inc >= 1e5, 'income $100K/s');
+    if (decideTimer < 3 * HUMAN) continue; // humans don't act every second
+    decideTimer = 0;
+    // act until nothing affordable is worth it
+    for (let guard = 0; guard < 50; guard++) {
+      // research: save for it when it costs < 10 minutes of income
+      const nr = nextResearch();
+      if (nr && inc > 0 && RESEARCH[nr].cost <= inc * 600) {
+        if (S.money >= RESEARCH[nr].cost) { S.money -= RESEARCH[nr].cost; S.research[nr] = true; mark('research ' + nr); continue; }
+        break; // saving up
+      }
+      const opts = options().filter((o) => isFinite(o.cost) && o.gain > 0).sort((a, b) => a.cost / a.gain - b.cost / b.gain);
+      const best = opts[0];
+      if (!best) break;
+      // land wall?
+      if (best.kind === 'line' && totalBuildings() + best.nb > landCap() && S.land < LAND_COSTS.length) {
+        const lc = LAND_COSTS[S.land];
+        if (S.money >= lc) { S.money -= lc; S.land++; mark('land ' + S.land); continue; }
+        break;
+      }
+      // gold needs land 3
+      if (S.research.goldworking && S.land < 3 && S.land < LAND_COSTS.length && LAND_COSTS[S.land] < inc * 900) {
+        const lc = LAND_COSTS[S.land];
+        if (S.money >= lc) { S.money -= lc; S.land++; mark('land ' + S.land + ' (for gold)'); continue; }
+        break;
+      }
+      if (S.money < best.cost) break;
+      S.money -= best.cost;
+      if (best.kind === 'line') {
+        for (const b in best.acc) S.counts[b] += best.acc[b];
+        S.counts.belt += best.nb - Object.values(best.acc).reduce((a, b) => a + b, 0);
+        S.lines[best.p] = (S.lines[best.p] || 0) + best.rate;
+        once('first-' + best.p, true, 'first line of ' + best.p);
+      } else {
+        S.upgrades[best.id] = lvl(best.id) + 1;
+      }
+    }
+    // launch: once spaceflight is done, buy pad and divert robots
+    if (S.research.spaceflight && !marked.pad && S.money >= BUILDINGS.launchpad.cost) { S.money -= BUILDINGS.launchpad.cost; marked.pad = 1; mark('launch pad built'); }
+    if (marked.pad && S.lines.robot) {
+      S.robotsLaunched += S.lines.robot * 3 * HUMAN;
+      if (S.robotsLaunched >= LAUNCH_REQ && !marked.launch) { marked.launch = 1; mark('🚀 LAUNCH'); break; }
+    }
+  }
+  return { log, S };
+}
+
+const fmtT = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + 'h ' : '') + m + 'm'; };
+const { log, S } = run();
+const lines = log.map(([t, w, inc]) => `${fmtT(t).padStart(8)}  ${w.padEnd(32)} income $${fmt(inc)}/s`);
+lines.push('', 'final counts: ' + JSON.stringify(Object.fromEntries(Object.entries(S.counts).map(([k, v]) => [k, Math.round(v)]))));
+lines.push('upgrades: ' + JSON.stringify(S.upgrades), 'land: ' + S.land, 'lines: ' + JSON.stringify(Object.fromEntries(Object.entries(S.lines).map(([k, v]) => [k, +v.toFixed(1)]))));
+document.getElementById('out').textContent = lines.join('\n');
+</script></body></html>

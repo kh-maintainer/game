@@ -402,3 +402,69 @@ textarea { width: 100%; font-size: 11px; resize: vertical; margin-top: 8px; }
   #minimap { width: 124px; height: 124px; }
   #clock { display: none; }
 }
+
+/* ------------------------------ story UI ------------------------------- */
+#goal { cursor: pointer; }
+#goal:hover { filter: brightness(1.12); }
+.gtext { font-weight: 600; margin: 2px 0 4px; }
+.gbar { position: relative; height: 14px; background: var(--deep); border: 2px solid var(--ink); margin: 2px 0 3px; }
+.gbar > div { height: 100%; background: linear-gradient(180deg, var(--lime), var(--green)); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25); transition: width 0.25s; }
+.gbar > span { position: absolute; inset: 0; font-size: 10px; line-height: 10px; text-align: center; color: var(--white); text-shadow: 1px 1px 0 var(--ink); }
+.gfoot { font-size: 12px; }
+
+#contract {
+  display: flex; gap: 8px; align-items: center;
+  padding: 8px;
+  background: var(--panel);
+  border: 3px solid var(--ink);
+  border-left: 5px solid var(--gold);
+  box-shadow: var(--bevel), var(--drop);
+  font-size: 13px;
+  animation: pop 0.3s ease-out;
+}
+#contract .gbar > div { background: linear-gradient(180deg, var(--gold), var(--orange)); }
+.cport { width: 44px; height: 44px; image-rendering: pixelated; border: 2px solid var(--ink); flex: none; }
+.cbody { flex: 1; min-width: 0; }
+
+#dialog {
+  position: fixed;
+  left: 50%; bottom: 112px;
+  transform: translateX(-50%);
+  width: min(660px, 92vw);
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 3px solid var(--ink);
+  box-shadow: var(--bevel), var(--drop), 0 0 0 3px var(--slate2);
+  z-index: 25;
+  cursor: pointer;
+  animation: pop 0.25s cubic-bezier(.3, 1.4, .5, 1);
+}
+#dialog.letter { background: linear-gradient(180deg, #4a3226, #2a1d22); box-shadow: var(--bevel), var(--drop), 0 0 0 3px var(--wood, #8f563b); }
+#dialog.letter .dtext { font-style: italic; color: #ffe6c8; }
+.dport { width: 96px; height: 96px; image-rendering: pixelated; border: 3px solid var(--ink); flex: none; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4); }
+.dbody { flex: 1; min-height: 96px; display: flex; flex-direction: column; }
+.dname { font-weight: 600; font-size: 17px; text-shadow: 2px 2px 0 var(--ink); }
+.dname .muted { font-size: 12px; font-weight: 400; text-shadow: none; }
+.dtext { flex: 1; font-size: 16px; line-height: 1.45; margin-top: 4px; }
+.dhint { align-self: flex-end; font-size: 11px; color: var(--gold); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.4; } }
+.dskip { position: absolute; top: -12px; right: -12px; padding: 0 6px; font-size: 12px; }
+
+.chapter {
+  position: fixed; left: 50%; top: 32%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 35;
+  animation: chapterIn 0.6s cubic-bezier(.3, 1.4, .5, 1);
+  transition: opacity 0.8s, transform 0.8s;
+}
+.chapter.out { opacity: 0; transform: translate(-50%, -60%); }
+.cnum { font-size: 18px; letter-spacing: 8px; color: var(--white); text-shadow: 2px 2px 0 var(--ink); }
+.ctitle2 { font-size: 54px; font-weight: 600; color: var(--gold); text-shadow: 3px 3px 0 var(--orange), 6px 6px 0 var(--red), 9px 9px 0 var(--ink); }
+@keyframes chapterIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); } }
+
+.journal { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-right: 6px; }
+.jline { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.jline img { width: 40px; height: 40px; image-rendering: pixelated; border: 2px solid var(--ink); flex: none; }

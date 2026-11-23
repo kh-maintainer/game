@@ -596,6 +596,125 @@ function cloudSprite(seed) {
   });
 }
 
+// ------------------------------ characters ---------------------------------
+const SKIN = '#f2c09a', SKIN_D = '#d39a72';
+
+// Little engineer, 16x16. facing: 0 down, 1 up, 2 side (right). frame 0/1 = walk step, 2 = hammer swing.
+function avatarSprite(helmet, helmetD, facing, frame) {
+  return sprite(16, 16, (P) => {
+    const shirt = PAL.blue, shirtD = PAL.navy, pants = PAL.slate;
+    // legs
+    const step = frame === 1;
+    if (facing === 2) {
+      P(5, 12, 6, 4, K);
+      P(6, 12, 2, step ? 2 : 3, pants); P(9, 12, 2, step ? 3 : 2, pants);
+      P(step ? 5 : 6, 15, 3, 1, K); P(step ? 9 : 8, 15, 3, 1, K);
+    } else {
+      P(4, 12, 8, 4, K);
+      P(5, 12, 2, step ? 2 : 3, pants); P(9, 12, 2, step ? 3 : 2, pants);
+      P(5, 14 + (step ? 0 : 1), 2, 1, K); P(9, 14 + (step ? 1 : 0), 2, 1, K);
+    }
+    // body
+    P(3, 8, 10, 5, K);
+    P(4, 8, 8, 4, shirt);
+    P(4, 11, 8, 1, shirtD);
+    P(7, 8, 2, 3, facing === 1 ? shirtD : PAL.gold); // overall strap / back
+    // arms
+    if (frame === 2) {
+      P(11, 4, 2, 5, K); P(11, 5, 1, 3, SKIN);
+      P(12, 1, 1, 5, PAL.woodL);           // hammer handle
+      P(10, 0, 5, 2, K); P(11, 0, 3, 1, PAL.mist); // hammer head
+    } else {
+      P(2, 9, 2, 3, K); P(12, 9, 2, 3, K);
+      P(2, 9, 1, 2, SKIN); P(13, 9, 1, 2, SKIN);
+    }
+    // head
+    P(3, 1, 10, 8, K);
+    if (facing === 1) {
+      P(4, 4, 8, 4, '#7a4a2a'); // hair from behind
+    } else {
+      P(4, 4, 8, 4, SKIN);
+      P(4, 7, 8, 1, SKIN_D);
+      if (facing === 0) { P(6, 5, 1, 1, K); P(9, 5, 1, 1, K); P(5, 6, 1, 1, '#f59a7a'); P(10, 6, 1, 1, '#f59a7a'); }
+      else { P(10, 5, 1, 1, K); P(12, 6, 1, 1, SKIN_D); P(4, 4, 3, 3, '#7a4a2a'); }
+    }
+    // hard hat
+    P(4, 1, 8, 3, helmet);
+    P(5, 1, 4, 1, '#ffffff');
+    P(3, 3, 10, 1, helmetD);
+    if (facing === 2) P(12, 3, 2, 1, helmetD);
+  });
+}
+
+// BOLT, a hovering helper robot (12x14). frame toggles thruster flame.
+function boltSprite(frame) {
+  return sprite(12, 14, (P) => {
+    disc(P, 6, 6, 5.5, K);
+    disc(P, 6, 6, 4.6, PAL.mist);
+    disc(P, 4.6, 4.4, 1.8, PAL.white);
+    P(2, 5, 8, 3, K);
+    P(3, 6, 2, 1, PAL.cyan); P(7, 6, 2, 1, PAL.cyan);
+    P(8, 8, 1, 1, PAL.orange); // rust
+    P(5, 0, 2, 1, K); P(5, 0, 1, 1, PAL.red);
+    P(4, 11, 4, 1, K);
+    P(5, 12, 2, 1, frame ? PAL.gold : PAL.orange);
+    if (frame) P(5, 13, 2, 1, PAL.orange);
+  });
+}
+
+// Marlo the trader, standing (16x16). frame 1 = waving.
+function marloSprite(frame) {
+  return sprite(16, 16, (P) => {
+    P(4, 12, 8, 4, K); P(5, 12, 2, 3, PAL.woodD); P(9, 12, 2, 3, PAL.woodD);
+    P(3, 7, 10, 6, K); P(4, 7, 8, 5, PAL.green); P(7, 7, 2, 5, PAL.white); P(4, 11, 8, 1, PAL.teal);
+    if (frame) { P(12, 2, 2, 6, K); P(12, 2, 1, 2, '#e0a070'); } else { P(12, 8, 2, 3, K); P(12, 8, 1, 2, '#e0a070'); }
+    P(2, 8, 2, 3, K); P(2, 8, 1, 2, '#e0a070');
+    P(4, 2, 8, 6, K); P(5, 3, 6, 4, '#e0a070');
+    P(6, 4, 1, 1, K); P(9, 4, 1, 1, K);
+    P(5, 6, 6, 1, '#4a2a1a'); P(4, 5, 1, 1, '#4a2a1a'); P(11, 5, 1, 1, '#4a2a1a');
+    // fez
+    P(5, 0, 6, 3, K); P(6, 0, 4, 2, PAL.red); P(6, 2, 4, 1, PAL.gold); P(10, 0, 1, 3, PAL.gold);
+  });
+}
+
+// Dialogue portraits, 24x24.
+function portrait(who) {
+  return sprite(24, 24, (P) => {
+    const bg = { bolt: PAL.navy, marlo: '#5d3a2a', quill: '#3a1f4f', ada: '#8f563b' }[who];
+    P(0, 0, 24, 24, bg);
+    for (let y = 0; y < 24; y += 2) P(0, y, 24, 1, 'rgba(255,255,255,0.04)');
+    if (who === 'bolt') {
+      P(11, 1, 2, 4, K); P(11, 0, 2, 2, PAL.red);
+      disc(P, 12, 13, 9.2, K); disc(P, 12, 13, 8.2, PAL.mist); disc(P, 9, 10, 3.2, PAL.white);
+      P(4, 10, 16, 5, K); P(6, 11, 4, 3, PAL.cyan); P(14, 11, 4, 3, PAL.cyan); P(7, 11, 1, 1, PAL.white); P(15, 11, 1, 1, PAL.white);
+      P(9, 17, 6, 1, K); P(9, 19, 6, 1, K); P(17, 16, 2, 1, PAL.orange); P(6, 18, 1, 1, PAL.orange);
+      P(2, 12, 2, 3, PAL.steel); P(20, 12, 2, 3, PAL.steel);
+    } else if (who === 'marlo') {
+      P(4, 20, 16, 4, PAL.green); P(10, 20, 4, 4, PAL.white);
+      disc(P, 12, 13, 7.2, K); disc(P, 12, 13, 6.3, '#e0a070');
+      P(6, 2, 12, 7, K); P(7, 3, 10, 5, PAL.red); P(7, 6, 10, 1, PAL.gold); P(17, 3, 1, 6, PAL.gold); P(17, 9, 2, 1, PAL.gold);
+      P(9, 11, 1, 2, K); P(14, 11, 1, 2, K);
+      P(7, 15, 10, 2, '#4a2a1a'); P(6, 14, 1, 1, '#4a2a1a'); P(17, 14, 1, 1, '#4a2a1a');
+      P(10, 18, 4, 1, '#8a3a2a');
+    } else if (who === 'quill') {
+      P(4, 20, 16, 4, PAL.plum); P(10, 20, 4, 2, PAL.white);
+      disc(P, 12, 10, 8.2, '#c9c9d6'); disc(P, 12, 2.5, 3, '#c9c9d6');
+      disc(P, 12, 13, 6.2, SKIN);
+      P(7, 12, 4, 3, K); P(13, 12, 4, 3, K); P(8, 13, 2, 1, PAL.cyan); P(14, 13, 2, 1, PAL.cyan); P(11, 13, 2, 1, K);
+      P(3, 9, 2, 7, K); P(4, 16, 5, 1, K); P(9, 16, 1, 1, PAL.red);
+      P(10, 17, 4, 1, '#a5482f');
+    } else {
+      P(4, 20, 16, 4, PAL.wood); P(8, 19, 8, 2, PAL.red);
+      disc(P, 12, 11, 8.4, PAL.white);
+      disc(P, 12, 13.5, 6.2, SKIN);
+      P(6, 6, 12, 3, K); P(7, 7, 4, 1, PAL.gold); P(13, 7, 4, 1, PAL.gold);
+      P(8, 13, 3, 1, K); P(13, 13, 3, 1, K);
+      P(7, 15, 2, 1, '#f59a7a'); P(15, 15, 2, 1, '#f59a7a');
+      P(10, 17, 4, 1, '#a5482f');
+    }
+  });
+}
+
 const SPR = {
   items: {},
   belt: [],
@@ -637,6 +756,15 @@ function buildSprites() {
   for (let f = 0; f < 2; f++) SPR.chest.push(chestFrame(f));
   for (let f = 0; f < 2; f++) SPR.launchpad.push(launchpadFrame(f));
   SPR.rocket = rocketSprite();
+  // player avatars: host wears a gold hard hat, guest a cyan one
+  SPR.avatar = {};
+  for (const [role, h, hd] of [['host', PAL.gold, PAL.orange], ['guest', PAL.cyan, PAL.sky]]) {
+    SPR.avatar[role] = [0, 1, 2].map((facing) => [0, 1, 2].map((f) => avatarSprite(h, hd, facing, f)));
+  }
+  SPR.bolt = [boltSprite(0), boltSprite(1)];
+  SPR.marlo = [marloSprite(0), marloSprite(1)];
+  SPR.portraits = {};
+  for (const who of ['bolt', 'marlo', 'quill', 'ada']) SPR.portraits[who] = portrait(who);
   SPR.trees = [null, treeSprite(1), treeSprite(2)];
   SPR.bush = bushSprite();
   SPR.rock = rockSprite();
@@ -649,7 +777,7 @@ const ICON_URL = {};
 function iconURL(kind, id) {
   const key = kind + ':' + id;
   if (!ICON_URL[key]) {
-    const src = kind === 'item' ? SPR.items[id] : kind === 'coin' ? SPR.coin : SPR.icons[id];
+    const src = kind === 'item' ? SPR.items[id] : kind === 'coin' ? SPR.coin : kind === 'portrait' ? SPR.portraits[id] : SPR.icons[id];
     ICON_URL[key] = src.toDataURL();
   }
   return ICON_URL[key];

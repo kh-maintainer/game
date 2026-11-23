@@ -131,6 +131,27 @@ try {
   check('goals progress', ga.goalIdx >= 2, 'goalIdx=' + ga.goalIdx);
   check('achievements unlock', !!ga.meta.achievements.first_sale, Object.keys(ga.meta.achievements).join(','));
 
+  // 12b. story events fire once per save
+  check('story event on goal', ga.meta.storySeen.g0 === 1 && ga.meta.storySeen.g1 === 1);
+  const storyCount = () => ga.events.filter((e) => e.type === 'story').length;
+  const sBefore = storyCount(); ga.storyEvent('g0');
+  check('story lines play once', storyCount() === sBefore);
+
+  // 12c. Marlo's contracts: appear, count deliveries, pay a premium
+  let gc = fresh(31); c = gc.center();
+  gc.goalIdx = 5; gc.stats.sold.iron_plate = 100; gc.stats.playTime = 100;
+  gc.newContract();
+  const ct = gc.contract;
+  check('contract created', ct && ct.item === 'iron_plate' && ct.qty >= 5 && ct.reward > ct.qty * ITEMS.iron_plate.value, JSON.stringify(ct));
+  const mBefore = gc.money;
+  for (let i = 0; i < ct.qty; i++) gc.sell('iron_plate');
+  check('contract pays on completion', !gc.contract && gc.money - mBefore >= ct.reward, 'gain=' + (gc.money - mBefore).toFixed(0) + ' reward=' + ct.reward);
+  gc.newContract(); gc.contract.t = 0.1; gc.updateContract(0.5);
+  check('contract expires', !gc.contract && gc.events.some((e) => e.type === 'contract' && e.state === 'fail'));
+  const snapC = JSON.parse(JSON.stringify(gc.serialize())); gc.newContract(); const snap2 = JSON.parse(JSON.stringify(gc.serialize()));
+  const gr = new Game(1); gr.restore(snap2);
+  check('contract survives save/sync', gr.contract && gr.contract.item === gc.contract.item && gr.contract.qty === gc.contract.qty);
+
   // 13. v1 save migration
   const v1 = { seed: 5, money: 500, totalEarned: 1000, upgrades: { belt_speed: 2 }, research: {}, stats: { sold: { iron_ore: 10 } }, buildings: [{ t: 'belt', x: 40, y: 40, d: 0, p: 2 }] };
   const gm = Game.fromData(v1);

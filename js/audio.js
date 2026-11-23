@@ -93,7 +93,7 @@ const Sound = {
   play(name, opt = {}) {
     if (!this.ctx || this.settings.muted || this.settings.sfx <= 0) return;
     const now = performance.now();
-    const gap = { sell: 70, place: 40, remove: 40, rotate: 40, error: 200, click: 30 }[name] || 0;
+    const gap = { sell: 120, place: 40, remove: 40, rotate: 40, error: 200, click: 30, blip: 45 }[name] || 0;
     if (gap && now - (this.last[name] || 0) < gap) return;
     this.last[name] = now;
     const r = (a, b) => a + Math.random() * (b - a);
@@ -156,6 +156,9 @@ const Sound = {
       case 'leave':
         this.tone(990, 0.1, { type: 'triangle', vol: 0.15 });
         this.tone(660, 0.18, { type: 'triangle', vol: 0.15, delay: 0.1 });
+        break;
+      case 'blip':
+        this.tone(opt.f || 600, 0.035, { type: 'square', vol: 0.035 });
         break;
       case 'chat':
         this.tone(1568, 0.06, { type: 'triangle', vol: 0.1 });
