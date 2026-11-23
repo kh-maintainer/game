@@ -1,6 +1,6 @@
 'use strict';
 // ---------------------------------------------------------------------------
-// Core simulation: map, buildings, item flow, economy, prestige, save/load.
+// Core simulation: map, buildings, item flow, economy, power, patents, save/load.
 // Every player-initiated change goes through Game.apply(action) so that it can
 // be replayed identically on a co-op partner's machine.
 // ---------------------------------------------------------------------------
@@ -218,10 +218,10 @@ const LOGIC = {
 
   launchpad: {
     init(b) { if (!b.count) b.count = 0; b.launchT = b.launchT || 0; },
-    accepts(g, b, item) { return item === 'robot' && !b.launchT && b.count < LAUNCH_REQ; },
+    accepts(g, b, item) { return item === 'robot' && !b.launchT && b.count < g.launchReq(); },
     insert(g, b) {
       b.count++;
-      if (b.count >= LAUNCH_REQ) { b.launchT = 0.0001; g.events.push({ type: 'liftoff', x: b.x, y: b.y }); }
+      if (b.count >= g.launchReq()) { b.launchT = 0.0001; g.events.push({ type: 'liftoff', x: b.x, y: b.y }); }
     },
     update(g, b, dt) {
       if (!b.launchT) return;
@@ -270,11 +270,11 @@ class Game {
     this.ore = new Array(this.w * this.h).fill(null);
     this.grid = new Array(this.w * this.h).fill(null);
     this.buildings = [];
-    this.money = this.startMoney();
+    this.money = START_MONEY;
     this.runEarned = 0;
     this.upgrades = {};
-    this.research = this.patentLvl('archives') ? Object.assign({}, this.research || {}) : {};
-    this.land = this.startLand();
+    this.research = {};
+    this.land = 0;
     this.stats = { sold: {}, crafted: {}, playTime: 0 };
     this.goalIdx = 0;
     this.runLaunches = 0;
@@ -394,7 +394,7 @@ class Game {
   achCount() { return Object.keys(this.meta.achievements).length; }
   beltSpeed() { return BASE_BELT_SPEED * Math.pow(1.2, this.lvl('belt_speed')) * (1 + 0.15 * this.patentLvl('rollers')); }
   minerRate() { return BASE_MINER_RATE * Math.pow(1.25, this.lvl('miner_speed')) * (1 + 0.15 * this.patentLvl('drills')); }
-  craftMult() { return Math.pow(1.2, this.lvl('craft_speed')); }
+  craftMult() { return Math.pow(1.2, this.lvl('craft_speed')) * (1 + 0.1 * this.patentLvl('overclock')); }
   luckChance() { return 0.04 * this.lvl('lucky'); }
   patentMult() { return 1 + 0.05 * this.meta.patentsTotal; }
   achMult() { return 1 + ACH_BONUS * this.achCount(); }
@@ -402,8 +402,7 @@ class Game {
     return Math.pow(1.15, this.lvl('sell_value')) * (1 + 0.25 * this.patentLvl('brand_value')) * this.patentMult() * this.achMult();
   }
   offlineEfficiency() { return 0.5 + 0.1 * this.patentLvl('night_shift'); }
-  startMoney() { const l = this.patentLvl('seed_capital'); return START_MONEY + 750 * l * l; }
-  startLand() { return Math.min(LAND_COSTS.length, this.patentLvl('land_grant')); }
+  launchReq() { return Math.round(LAUNCH_REQ * Math.pow(1.5, this.meta.launches)); }
 
   hasResearch(id) { return !!this.research[id]; }
   buildingUnlocked(type) { const u = BUILDINGS[type].unlock; return !u || this.hasResearch(u); }
@@ -434,7 +433,6 @@ class Game {
     const p = PATENT_SHOP[id];
     return Math.ceil(p.base * Math.pow(p.growth, this.patentLvl(id)));
   }
-  claimablePatents() { return Math.floor(Math.sqrt(this.runEarned / PATENT_DIVISOR)); }
 
   tunnelPartner(b) {
     if (b.type !== 'tunnel' || b.mode !== 'in') return null;
@@ -447,7 +445,7 @@ class Game {
   }
 
   // ------------------------------- actions ---------------------------------
-  // Returns { ok, err?, ... }. Pure function of (state, action) except prestige's
+  // Returns { ok, err?, ... }. A pure function of (state, action), so co-op peers stay in step.
   // seed, which is chosen by the caller and carried inside the action.
   apply(a) {
     const B = (x, y) => this.at(x, y);
@@ -502,7 +500,7 @@ class Game {
       case 'research': return { ok: this.buyResearch(a.id) };
       case 'land': return { ok: this.buyLand() };
       case 'patent': return { ok: this.buyPatent(a.id) };
-      case 'prestige': return { ok: this.prestige(a.seed) };
+
     }
     return { ok: false };
   }
@@ -622,32 +620,28 @@ class Game {
     if (this.meta.patents < c) return false;
     this.meta.patents -= c;
     this.meta.patentUps[id] = this.patentLvl(id) + 1;
-    if (id === 'land_grant') this.land = Math.max(this.land, this.startLand());
     this.dirty = true;
     this.terrainDirty = true;
     return true;
   }
 
-  prestige(seed) {
-    const n = this.claimablePatents();
-    if (n < 1) return false;
+  // Patents are earned, never bought with a reset. Host/solo only (synced via snapshots).
+  grantPatents(n, why) {
+    if (this.isGuest || n <= 0) return;
     this.meta.patents += n;
     this.meta.patentsTotal += n;
-    this.meta.prestiges++;
-    this.newRun(seed);
-    this.events.push({ type: 'prestige', n });
-    this.storyEvent('prestige');
-    return true;
+    this.events.push({ type: 'patents', n, why });
+    this.storyEvent('patent');
+    this.dirty = true;
   }
 
   completeLaunch() {
+    const req = this.launchReq();
     this.meta.launches++;
     this.runLaunches++;
-    this.meta.patents += 5;
-    this.meta.patentsTotal += 5;
-    this.events.push({ type: 'launch' });
+    this.events.push({ type: 'launch', req, next: this.launchReq() });
     this.storyEvent('launch');
-    this.dirty = true;
+    this.grantPatents(PATENT_REWARDS.launch, `Launch #${this.meta.launches}`);
   }
 
   // ------------------------------- story -----------------------------------
@@ -679,7 +673,7 @@ class Game {
     const dur = CONTRACT.duration[0] + Math.random() * (CONTRACT.duration[1] - CONTRACT.duration[0]);
     const rate = this.stats.sold[item] / Math.max(60, this.stats.playTime); // items/s this run
     const qty = Math.max(5, Math.min(50000, Math.round((rate * dur * 0.8) / 5) * 5));
-    const reward = Math.ceil(qty * ITEMS[item].value * this.sellMult() * CONTRACT.premium);
+    const reward = Math.ceil(qty * ITEMS[item].value * this.sellMult() * CONTRACT.premium * (1 + 0.25 * this.patentLvl('negotiator')));
     this.contract = { item, qty, got: 0, t: dur, total: dur, reward };
     this.events.push({ type: 'contract', state: 'new', item, qty, reward });
   }
@@ -692,6 +686,7 @@ class Game {
     if (ok) {
       this.earn(c.reward);
       this.meta.life.contracts = (this.meta.life.contracts || 0) + 1;
+      if (this.meta.life.contracts % PATENT_REWARDS.contracts === 0) this.grantPatents(1, `${this.meta.life.contracts} orders delivered`);
     }
     this.events.push({ type: 'contract', state: ok ? 'done' : 'fail', item: c.item, qty: c.qty, reward: c.reward });
     this.dirty = true;
@@ -718,9 +713,11 @@ class Game {
       this.goalIdx++;
       this.events.push({ type: 'goal', text: goal.text, reward: goal.reward, idx: this.goalIdx });
       this.storyEvent('g' + (this.goalIdx - 1));
+      // finishing a chapter pays out Ada's patents
+      const ch = CHAPTERS.findIndex((c) => c.from === this.goalIdx);
+      if (ch > 0) this.grantPatents(PATENT_REWARDS.chapter, `Chapter ${ch}: ${CHAPTERS[ch - 1].title} complete`);
       this.dirty = true;
     }
-    if (this.meta.prestiges === 0 && this.claimablePatents() >= 2) this.storyEvent('patent');
   }
 
   // ----------------------------- simulation --------------------------------
@@ -755,7 +752,7 @@ class Game {
       if (!b.working) continue;
       b.burn -= dt * genLoad;
       if (b.burn <= 0) {
-        if (b.fuel > 0) { b.fuel--; b.burn += COAL_SECONDS; } else b.burn = 0;
+        if (b.fuel > 0) { b.fuel--; b.burn += COAL_SECONDS * (1 + 0.25 * this.patentLvl('clean_burn')); } else b.burn = 0;
       }
     }
     this.power = { supply, demand, ratio };

@@ -475,3 +475,4 @@ textarea { width: 100%; font-size: 11px; resize: vertical; margin-top: 8px; }
 #power.low { color: var(--gold); background: rgba(255, 205, 117, 0.15); }
 #power.bad { color: #ff8a9a; background: rgba(177, 62, 83, 0.3); animation: blink 0.8s steps(2) infinite; }
 select { font: inherit; color: var(--text); background: var(--deep); border: 3px solid var(--ink); padding: 3px 6px; }
+.earn { font-size: 13px; padding: 2px 0; }

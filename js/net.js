@@ -197,7 +197,6 @@ const Net = {
           if (res.ok) {
             this.send({ t: 'act', a: d.a, by: 'guest' });
             ui.onRemoteAction(d.a, this.partner);
-            if (d.a.type === 'prestige') this.sendSnapshot();
           } else {
             this.send({ t: 'nack', a: d.a, err: res.err });
           }
@@ -255,7 +254,6 @@ const Net = {
     const res = g.apply(a);
     if (res.ok && this.role === 'host') {
       this.send({ t: 'act', a, by: 'host' });
-      if (a.type === 'prestige') this.sendSnapshot();
     }
     return res;
   },

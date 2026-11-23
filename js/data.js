@@ -1,7 +1,7 @@
 'use strict';
 // ---------------------------------------------------------------------------
 // Static game data: constants, items, recipes, buildings, upgrades, research,
-// prestige shop, achievements and the guided goal chain.
+// patent office, achievements, story and the guided goal chain.
 // ---------------------------------------------------------------------------
 
 const TILE = 16;
@@ -76,7 +76,7 @@ const BUILDINGS = {
   chest:     { name: 'Chest',      cost: 80,   growth: 1.08, dir: true,  key: '8', desc: `Buffers up to ${CHEST_CAP} items and releases them out the front.`, unlock: 'logistics' },
   tunnel:    { name: 'Tunnel',     cost: 40,   growth: 1.05, dir: true,  key: '9', desc: `Place an entrance, then an exit up to ${TUNNEL_RANGE} tiles ahead. Items travel underground.`, unlock: 'logistics' },
   sorter:    { name: 'Sorter',     cost: 120,  growth: 1.06, dir: true,  key: '0', desc: 'Filtered item goes straight on, everything else goes left / right. Click to set the filter.', unlock: 'logistics' },
-  launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 2.0,  dir: false, key: 'P', desc: `Feed it ${LAUNCH_REQ} Robots to launch the Orbital Foundry.`, unlock: 'spaceflight' },
+  launchpad: { name: 'Launch Pad', cost: 2e6,  growth: 2.0,  dir: false, key: 'P', desc: 'Feed it Robots to launch a piece of the Orbital Foundry. Every launch pays 5 patents; each one needs more robots.', unlock: 'spaceflight' },
   generator: { name: 'Generator',  cost: 300,  growth: 1.15, dir: false, key: 'V', desc: 'Burns coal to make 20 MW of power for Assemblers and other advanced machines. Feed it coal from any side.', unlock: 'assembly' },
   solar:     { name: 'Solar Panel', cost: 20000, growth: 1.12, dir: false, key: 'B', desc: 'Makes 8 MW of clean power, no fuel needed.', unlock: 'solar' },
   deepdrill: { name: 'Deep Drill', cost: 450,  growth: 1.14, dir: true,  key: 'Z', family: 'miner', speed: 3, desc: 'A Miner that digs 3x faster. Chains like a Miner.', unlock: 'deepdrills' },
@@ -123,17 +123,19 @@ const RESEARCH = {
   spaceflight: { name: 'Spaceflight', cost: 2.5e7, req: ['robotics'],                desc: 'Unlocks the Launch Pad. Launch the Orbital Foundry!' },
 };
 
-// Permanent upgrades bought with Patents (prestige currency).
+// Patents: Ada's inventions, earned by finishing chapters, delivering Marlo's
+// orders and launching rockets. Nothing is ever reset — each patent gives
+// +5% income forever, and they can be spent on permanent upgrades.
+const PATENT_REWARDS = { chapter: 2, contracts: 10, launch: 5 }; // contracts: 1 patent per this many orders
 const PATENT_SHOP = {
-  seed_capital: { name: 'Seed Capital',     desc: 'Start each run with more money',          base: 1, growth: 2,   max: 10 },
-  brand_value:  { name: 'Brand Value',      desc: '+25% sell value',                        base: 2, growth: 1.7, max: 40 },
-  drills:       { name: 'Diamond Drills',   desc: '+15% miner speed',                       base: 1, growth: 1.6, max: 40 },
-  rollers:      { name: 'Maglev Rollers',   desc: '+15% conveyor speed',                    base: 1, growth: 1.6, max: 30 },
-  night_shift:  { name: 'Night Shift',      desc: '+10% offline earnings (base 50%)',        base: 1, growth: 2,   max: 5 },
-  land_grant:   { name: 'Land Grants',      desc: 'Start each run with +1 land expansion',  base: 3, growth: 2.5, max: 5 },
-  archives:     { name: 'Company Archives', desc: 'Keep all research when you prestige',    base: 12, growth: 1,  max: 1 },
+  brand_value:  { name: 'Brand Value',      desc: '+25% sell value',                         base: 2, growth: 1.7, max: 40 },
+  drills:       { name: 'Diamond Drills',   desc: '+15% miner speed',                        base: 1, growth: 1.6, max: 20 },
+  rollers:      { name: 'Maglev Rollers',   desc: '+15% conveyor speed',                     base: 1, growth: 1.6, max: 20 },
+  overclock:    { name: 'Overclocking',     desc: '+10% crafting speed',                     base: 1, growth: 1.6, max: 20 },
+  clean_burn:   { name: 'Clean Combustion', desc: 'Generators get 25% more out of each coal', base: 2, growth: 2,   max: 6 },
+  negotiator:   { name: 'Silver Tongue',    desc: "Marlo's orders pay +25% more",            base: 1, growth: 1.8, max: 10 },
+  night_shift:  { name: 'Night Shift',      desc: '+10% offline earnings (base 50%)',         base: 1, growth: 2,   max: 5 },
 };
-const PATENT_DIVISOR = 25000; // claimable = floor(sqrt(runEarned / divisor))
 
 const totalSold = (g) => g.meta.life.itemsSold;
 const lifeSold = (g, id) => g.meta.life.sold[id] || 0;
@@ -164,8 +166,8 @@ const ACHIEVEMENTS = [
   { id: 'earn_1b',     name: 'Billionaire',       desc: 'Earn $1B in total',               check: (g) => g.meta.lifetimeEarned >= 1e9 },
   { id: 'land_max',    name: 'Manifest Destiny',  desc: 'Own all the land',                check: (g) => g.land >= LAND_COSTS.length },
   { id: 'upgrades_40', name: 'Min-Maxer',         desc: 'Reach 40 total upgrade levels',   check: (g) => Object.values(g.upgrades).reduce((a, v) => a + v, 0) >= 40 },
-  { id: 'prestige_1',  name: 'Fresh Start',       desc: 'Prestige once',                   check: (g) => g.meta.prestiges >= 1 },
-  { id: 'prestige_5',  name: 'Serial Founder',    desc: 'Prestige 5 times',                check: (g) => g.meta.prestiges >= 5 },
+  { id: 'patents_10',  name: 'Inventor',          desc: 'Earn 10 patents',                 check: (g) => g.meta.patentsTotal >= 10 },
+  { id: 'contracts_25', name: "Marlo's Favourite", desc: "Deliver 25 of Marlo's orders",  check: (g) => (g.meta.life.contracts || 0) >= 25 },
   { id: 'launch',      name: 'Liftoff',           desc: 'Launch the Orbital Foundry',      check: (g) => g.meta.launches >= 1 },
   { id: 'launch_3',    name: 'Space Program',     desc: 'Launch 3 times',                  check: (g) => g.meta.launches >= 3 },
 ];
@@ -184,7 +186,7 @@ const GOALS = [
   { text: 'Grow your income', reward: 150, ...goalIncome(5) },
   { text: 'Buy an upgrade (Upgrades tab)', reward: 150, ...flag((g) => Object.keys(g.upgrades).length > 0) },
   { text: 'Research Splitters', reward: 200, ...flag((g) => g.hasResearch('splitter')) },
-  { text: 'Buy more land (Upgrades tab)', reward: 400, ...flag((g) => g.land > g.startLand()) },
+  { text: 'Buy more land (Upgrades tab)', reward: 400, ...flag((g) => g.land > 0) },
   { text: 'Research Assembly and sell gears', reward: 1000, ...sold('gear', 20) },
   { text: 'Smelt stone into bricks and sell them', reward: 1000, ...sold('brick', 20) },
   { text: 'Research Logistics', reward: 1500, ...flag((g) => g.hasResearch('logistics')) },
@@ -197,7 +199,7 @@ const GOALS = [
   { text: 'Build robots', reward: 3e6, check: (g) => (g.stats.crafted.robot || 0) >= 10, prog: (g) => [Math.min(10, g.stats.crafted.robot || 0), 10] },
   { text: 'Research Spaceflight', reward: 1e7, ...flag((g) => g.hasResearch('spaceflight')) },
   { text: 'Load a Launch Pad with robots and launch!', reward: 0, check: (g) => g.runLaunches > 0,
-    prog: (g) => [Math.max(0, ...g.buildings.filter((b) => b.type === 'launchpad').map((b) => b.count || 0)), LAUNCH_REQ] },
+    prog: (g) => [Math.max(0, ...g.buildings.filter((b) => b.type === 'launchpad').map((b) => b.count || 0)), g.launchReq()] },
 ];
 
 // ------------------------------- story -------------------------------------
@@ -217,7 +219,7 @@ const CHARACTERS = {
   ada:   { name: 'Grandma Ada', role: 'A letter',                  color: '#ef7d57' },
 };
 
-// Lines play once per save (tracked in meta.storySeen). Keys: intro, g<N> (after goal N), launch, prestige, patent.
+// Lines play once per save (tracked in meta.storySeen). Keys: intro, g<N> (after goal N), launch, patent.
 const STORY = {
   intro: [
     ['bolt', 'BZZT! Oh! A visitor! …Wait. You have Ada\'s eyes. You must be her grandchild!'],
@@ -260,11 +262,11 @@ const STORY = {
   g17: [['quill', 'Spaceflight unlocked! Build a Launch Pad (key P) and feed it robots. Ada\'s dream is one launch away.']],
   launch: [
     ['quill', 'Liftoff confirmed! The Orbital Foundry is in orbit. I… I can see it through my telescope!'],
-    ['ada', 'If you are reading this, you did it. I knew you would. The sky is full of islands — go find the next one. — Ada'],
+    ['ada', 'If you are reading this, you did it. I knew you would. But a station is never finished — keep building, keep launching, and look after BOLT for me. — Ada'],
     ['marlo', 'Ha! I\'ll be selling souvenir rockets for years. Pleasure doing business, partner.'],
+    ['quill', 'And this is only the first module! Keep launching and the station keeps growing. Every launch earns more of Ada\'s patents.'],
   ],
-  patent: [['marlo', 'Investors keep asking about you. In the Patents tab you can hand this island on and start fresh with Ada\'s patents — every run gets faster.']],
-  prestige: [['bolt', 'A new island! Ada\'s patents come with us, so everything will be quicker this time. BZZT!']],
+  patent: [['marlo', "Word travels fast! Finishing a chapter earned you some of Ada's patents. They're yours forever: each one boosts all income by 5%, and you can spend them in the Patents tab."]],
 };
 
 // Marlo's delivery contracts: short side-objectives that pay a premium.

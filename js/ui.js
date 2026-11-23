@@ -14,7 +14,7 @@ const el = (tag, cls, html) => {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const itemImg = (id) => `<img class="ico" src="${iconURL('item', id)}" alt="">`;
 const bldImg = (id) => `<img class="ico" src="${iconURL('bld', id)}" alt="">`;
-const FORWARD_EVENTS = { ach: 1, goal: 1, launch: 1, story: 1, contract: 1 };
+const FORWARD_EVENTS = { ach: 1, goal: 1, launch: 1, story: 1, contract: 1, patents: 1 };
 const MINI_COLORS = {
   belt: '#8a8a98', miner: '#f2c94c', smelter: '#ff8a2a', seller: '#7be38f', splitter: '#e0c040', assembler: '#7898bb',
   foundry: '#c0573a', chest: '#b07a40', tunnel: '#5a5a66', sorter: '#b07ae0', launchpad: '#ffffff',
@@ -169,19 +169,18 @@ class UI {
         }));
       }
     } else if (this.tab === 'patents') {
-      const claim = g.claimablePatents();
-      const next = Math.pow(claim + 1, 2) * PATENT_DIVISOR;
       const info = el('div', 'prestige');
+      const ch = chapterOf(g.goalIdx);
+      const nextCh = CHAPTERS[ch + 1];
+      const contracts = g.meta.life.contracts || 0;
+      const toNext = PATENT_REWARDS.contracts - (contracts % PATENT_REWARDS.contracts);
       info.innerHTML = `
-        <div class="pbig"><span class="patent">✦</span> ${fmt(g.meta.patents)} <small>Patents</small></div>
-        <div class="cdesc">Lifetime patents: <b>${fmt(g.meta.patentsTotal)}</b> → <b class="good">+${fmt(g.meta.patentsTotal * 5)}%</b> income</div>
-        <div class="cdesc">Earned this run: <b>$${fmt(g.runEarned)}</b></div>
-        <div class="cdesc">Next patent at $${fmt(next)} this run</div>`;
-      const btn = el('button', 'prestige-btn' + (claim < 1 ? '' : ' ready'),
-        claim < 1 ? `Sell company (need $${fmt(PATENT_DIVISOR)} this run)` : `Sell company for ${fmt(claim)} Patent${claim > 1 ? 's' : ''}`);
-      btn.disabled = claim < 1;
-      btn.onclick = () => this.confirmPrestige();
-      info.appendChild(btn);
+        <div class="pbig"><span class="patent">✦</span> ${fmt(g.meta.patents)} <small>Patents to spend</small></div>
+        <div class="cdesc">Earned so far: <b>${fmt(g.meta.patentsTotal)}</b> → <b class="good">+${fmt(g.meta.patentsTotal * 5)}%</b> income, forever</div>
+        <h4>How to earn more</h4>
+        <div class="earn">📖 Finish a chapter: <b class="patent">+${PATENT_REWARDS.chapter}</b> <span class="muted">${nextCh ? `(next: ${nextCh.title})` : '(all done)'}</span></div>
+        <div class="earn">📜 Every ${PATENT_REWARDS.contracts} of Marlo's orders: <b class="patent">+1</b> <span class="muted">(${toNext} to go)</span></div>
+        <div class="earn">🚀 Launch a rocket: <b class="patent">+${PATENT_REWARDS.launch}</b> <span class="muted">(next needs ${fmt(g.launchReq())} robots)</span></div>`;
       add(info);
       h4('Patent Office');
       for (const id in PATENT_SHOP) {
@@ -219,7 +218,8 @@ class UI {
       rows.push(row('Earned', '$' + fmt(g.meta.lifetimeEarned)));
       rows.push(row('Items sold', fmt(L.itemsSold)));
       rows.push(row('Play time', fmtTime(L.playTime)));
-      rows.push(row('Prestiges', g.meta.prestiges));
+      rows.push(row('Patents earned', fmt(g.meta.patentsTotal)));
+      rows.push(row("Marlo's orders", fmt(L.contracts || 0)));
       rows.push(row('Launches', g.meta.launches));
       rows.push('<h4>Items (sold this run · value)</h4>');
       for (const id in ITEMS) rows.push(row(ITEMS[id].name, `${fmt(g.stats.sold[id] || 0)} · $${fmt(ITEMS[id].value * g.sellMult())}`, itemImg(id)));
@@ -235,28 +235,13 @@ class UI {
     });
   }
 
-  confirmPrestige() {
-    const g = this.game;
-    const n = g.claimablePatents();
-    const keep = g.patentLvl('archives') ? 'Research is kept (Company Archives).' : 'Research is reset.';
-    this.modal(`<h2>Sell the company?</h2>
-      <p>You'll receive <b class="patent">✦ ${fmt(n)} Patents</b>. Each lifetime patent permanently adds <b>+5% income</b>, and you can spend them in the Patent Office.</p>
-      <p class="muted">Your factory, money, upgrades and land are reset and you start on a brand-new map. ${keep} Achievements and patents are kept.${Net.role !== 'solo' ? ' <b>This affects both players.</b>' : ''}</p>
-      <div class="mbtns"><button id="m-cancel">Not yet</button><button id="m-ok" class="gold-btn">Sell & restart</button></div>`);
-    $('#m-cancel').onclick = () => this.closeModal();
-    $('#m-ok').onclick = () => {
-      this.closeModal();
-      this.act({ type: 'prestige', seed: (Math.random() * 2 ** 31) | 0 });
-    };
-  }
-
   // ----------------------------- goal widget -------------------------------
   renderGoal() {
     const g = this.game;
     const box = $('#goal');
     const goal = GOALS[g.goalIdx];
     if (!goal) {
-      box.innerHTML = `<div class="gtitle">EPILOGUE · THE NEXT ISLAND</div><div>The Orbital Foundry flies! Launch again for more patents, or move to a new island in the <b>Patents</b> tab.</div>`;
+      box.innerHTML = `<div class="gtitle">EPILOGUE · THE STATION GROWS</div><div>The Orbital Foundry flies! Keep growing the station: every launch pays <b class="patent">✦${PATENT_REWARDS.launch}</b> (next needs ${fmt(g.launchReq())} robots).</div>`;
       return;
     }
     const ch = chapterOf(g.goalIdx);
@@ -338,7 +323,7 @@ class UI {
 
   showJournal() {
     const g = this.game;
-    const keys = ['intro', ...GOALS.map((_, i) => 'g' + i), 'patent', 'launch', 'prestige'];
+    const keys = ['intro', ...GOALS.map((_, i) => 'g' + i), 'patent', 'launch'];
     const parts = [];
     for (const k of keys) {
       if (!g.meta.storySeen[k]) continue;
@@ -471,7 +456,7 @@ class UI {
     } else if (b.type === 'seller') {
       s = `Sell value ×${fmt(g.sellMult())}`;
     } else if (b.type === 'launchpad') {
-      s = b.launchT ? '<b class="gold">LIFTOFF!</b>' : `Robots loaded: ${itemImg('robot')} ${b.count || 0}/${LAUNCH_REQ}`;
+      s = b.launchT ? '<b class="gold">LIFTOFF!</b>' : `Robots loaded: ${itemImg('robot')} ${b.count || 0}/${g.launchReq()} · launch #${g.meta.launches + 1} pays ✦${PATENT_REWARDS.launch}`;
     }
     st.innerHTML = s;
   }
@@ -830,7 +815,7 @@ class UI {
           <button id="t-coop" class="big">Co-op</button>
           <button id="t-help" class="big">How to play</button>
         </div>
-        ${hasSave ? `<div class="muted">Saved factory · $${fmt(g.money)} · ${fmtTime(g.meta.life.playTime)} played${g.meta.prestiges ? ` · ✦${fmt(g.meta.patentsTotal)}` : ''}</div>` : ''}
+        ${hasSave ? `<div class="muted">Saved factory · $${fmt(g.money)} · ${fmtTime(g.meta.life.playTime)} played${g.meta.patentsTotal ? ` · ✦${fmt(g.meta.patentsTotal)} patents` : ''}</div>` : ''}
         <div class="muted small">Sound and music are synthesized live — press M to mute.</div>
       </div>`);
     this.titleOpen = true;
@@ -990,12 +975,9 @@ class UI {
         this.renderContract();
         break;
       }
-      case 'prestige':
-        Sound.play('prestige');
-        this.r.setGame(g);
-        this.select(null);
-        this.selectTool(null);
-        this.bigToast('✦', `Company sold for ${fmt(e.n)} Patents!`, 'A new map awaits. Your patents boost all income.');
+      case 'patents':
+        Sound.play('research');
+        this.bigToast('✦', `+${fmt(e.n)} Patent${e.n > 1 ? 's' : ''}!`, `${esc(e.why)} · each patent is +5% income forever`);
         break;
       case 'liftoff':
         Sound.play('liftoff');
@@ -1003,10 +985,10 @@ class UI {
       case 'launch':
         Sound.play('victory');
         this.modal(`<div class="victory"><div class="vrocket">🚀</div><h2>The Orbital Foundry has launched!</h2>
-          <p>Your factory built a space station out of ${LAUNCH_REQ} robots. ${g.meta.launches > 1 ? `That's launch #${g.meta.launches}.` : 'You beat Pixel Foundry!'}</p>
-          <p>Reward: <b class="patent">✦ 5 Patents</b></p>
+          <p>${fmt(e.req)} robots are on their way to orbit. ${g.meta.launches > 1 ? `That's launch #${g.meta.launches} — the station keeps growing!` : 'You finished Ada\'s dream!'}</p>
+          <p>Reward: <b class="patent">✦ ${PATENT_REWARDS.launch} Patents</b></p>
           <p class="muted">Lifetime: $${fmt(g.meta.lifetimeEarned)} earned · ${fmt(g.meta.life.itemsSold)} items sold · ${fmtTime(g.meta.life.playTime)} played</p>
-          <p class="muted">Keep going: every launch pays out more patents, and prestiging makes the next run faster.</p>
+          <p class="muted">Your factory keeps running. The next launch needs ${fmt(e.next)} robots and pays more patents.</p>
           <div class="mbtns"><button id="m-ok" class="gold-btn">Keep building</button></div></div>`, true);
         $('#m-ok').onclick = () => this.closeModal();
         break;
@@ -1050,7 +1032,7 @@ class UI {
       this.renderGoal();
       if (this.input.selected) this.renderInspector();
       const pp = $('#patents');
-      pp.classList.toggle('hidden', g.meta.patentsTotal === 0 && g.claimablePatents() === 0);
+      pp.classList.toggle('hidden', g.meta.patentsTotal === 0);
     }
     const now = performance.now();
     if (now - this.lastSlow > 250) {
@@ -1060,9 +1042,8 @@ class UI {
       this.updateInspectorState();
       this.renderGoal();
       this.renderContract();
-      const claim = g.claimablePatents();
-      $('#patents').innerHTML = `✦ ${fmt(g.meta.patents)}${claim ? ` <span class="good">(+${fmt(claim)})</span>` : ''}`;
-      if (claim > 0) $('#patents').classList.remove('hidden');
+      $('#patents').innerHTML = `✦ ${fmt(g.meta.patents)}`;
+      $('#patents').classList.toggle('hidden', g.meta.patentsTotal === 0);
       const p = g.power, pw = $('#power');
       if (p && (p.demand > 0 || p.supply > 0)) {
         pw.classList.remove('hidden');

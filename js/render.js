@@ -479,7 +479,7 @@ class Renderer {
       }
       ctx.drawImage(SPR.rocket, Math.round(rx), Math.round(ry));
       if (!lt) {
-        const f = (b.count || 0) / LAUNCH_REQ;
+        const f = (b.count || 0) / game.launchReq();
         ctx.fillStyle = '#1a1c2c';
         ctx.fillRect(b.x * TILE - 2, b.y * TILE + 17, 20, 2);
         ctx.fillStyle = '#73eff7';

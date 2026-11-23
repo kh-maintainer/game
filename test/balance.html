@@ -106,9 +106,6 @@ function run() {
     S.t += DT;
     decideTimer += DT;
     // goal rewards roughly arrive as the run progresses
-    once('p1', S.runEarned >= PATENT_DIVISOR, 'first patent claimable');
-    once('p6', S.runEarned >= 36 * PATENT_DIVISOR, '6 patents claimable');
-    once('p20', S.runEarned >= 400 * PATENT_DIVISOR, '20 patents claimable');
     once('i10', inc >= 10, 'income $10/s');
     once('i1k', inc >= 1e3, 'income $1K/s');
     once('i100k', inc >= 1e5, 'income $100K/s');

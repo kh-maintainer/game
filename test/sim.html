@@ -102,21 +102,33 @@ try {
   g6.apply({ type: 'land' });
   check('buying land expands', g6.land === 1 && !g6.placeError('belt', c.x + 15, c.y), 'land=' + g6.land);
 
-  // 8. prestige
-  let g7 = fresh(11); g7.runEarned = 1e6; g7.meta.achievements.x = 1;
-  const res = g7.apply({ type: 'prestige', seed: 42 });
-  check('prestige grants patents', res.ok && g7.meta.patents === Math.floor(Math.sqrt(1e6 / PATENT_DIVISOR)) && g7.seed === 42 && g7.buildings.length === 1, 'patents=' + g7.meta.patents);
-  check('prestige keeps meta', g7.meta.achievements.x === 1 && g7.money === START_MONEY);
+  // 8. patents are earned without any reset
+  let g7 = fresh(11); c = g7.center();
+  g7.place('belt', c.x - 1, c.y, 0);
+  const before7 = g7.buildings.length;
+  check('no prestige action', !g7.apply({ type: 'prestige', seed: 42 }).ok && g7.buildings.length === before7);
+  g7.goalIdx = CHAPTERS[1].from - 1;
+  GOALS[g7.goalIdx].check = () => true; // force-complete the last goal of chapter 1
+  g7.checkProgress();
+  check('chapter completion grants patents', g7.meta.patents === PATENT_REWARDS.chapter && g7.buildings.length === before7, 'patents=' + g7.meta.patents);
+  g7.meta.patents = 5;
   g7.apply({ type: 'patent', id: 'brand_value' });
   check('patent shop', g7.patentLvl('brand_value') === 1 && g7.sellMult() > 1.3, 'mult=' + g7.sellMult().toFixed(2));
+  // every N delivered orders pays a patent
+  g7.meta.patents = 0; g7.meta.life.contracts = PATENT_REWARDS.contracts - 1;
+  g7.stats.sold.iron_plate = 100; g7.stats.playTime = 100; g7.newContract();
+  const ct7 = g7.contract; for (let i = 0; i < ct7.qty; i++) g7.sell(ct7.item);
+  check('orders pay patents', g7.meta.patents === 1, 'patents=' + g7.meta.patents);
 
-  // 9. launch
+  // 9. launch: pays patents, factory keeps running, next launch needs more robots
   let g8 = fresh(13); g8.research.spaceflight = true; c = g8.center();
   g8.place('launchpad', c.x + 3, c.y, 0);
   const pad = g8.at(c.x + 3, c.y);
-  for (let i = 0; i < LAUNCH_REQ; i++) LOGIC.launchpad.insert(g8, pad, 'robot');
+  const req1 = g8.launchReq();
+  for (let i = 0; i < req1; i++) LOGIC.launchpad.insert(g8, pad, 'robot');
   run(g8, 5);
-  check('launch completes', g8.meta.launches === 1 && g8.meta.patents === 5 && pad.count === 0, 'launches=' + g8.meta.launches);
+  check('launch completes', g8.meta.launches === 1 && g8.meta.patents === PATENT_REWARDS.launch && pad.count === 0 && g8.buildings.length > 1, 'launches=' + g8.meta.launches);
+  check('next launch needs more robots', g8.launchReq() > req1, req1 + ' -> ' + g8.launchReq());
 
   // 10. co-op: host & guest apply the same actions in the same order + snapshot sync
   const host = fresh(99), guest = fresh(99); guest.isGuest = true;
